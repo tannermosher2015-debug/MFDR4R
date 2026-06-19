@@ -1,0 +1,754 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Maui Fire Department — Firefighter Overtime (Rank-for-Rank) Recall System. Demo prototype.">
+<title>MFD Overtime Recall — Demo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --font-ui:'Archivo',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+  --font-mono:'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+  --bg:#e9edf2; --surface:#ffffff; --surface-2:#f4f7fb; --surface-3:#eef2f7;
+  --border:#d4dce6; --border-strong:#b9c5d3;
+  --text:#15202d; --muted:#566372; --faint:#7a8794;
+  --accent:#1d4ed8; --accent-text:#ffffff; --accent-weak:#e6edfb;
+  --ok:#117a3d; --ok-bg:#e3f4e9; --warn:#8a5a00; --warn-bg:#fbf0d9; --crit:#b42318; --crit-bg:#fbe7e4;
+  --p1:#c4361f; --p2:#1f4fc4; --p3:#1f7a3d; /* 1st red, 2nd blue, 3rd green */
+  --shadow:0 1px 2px rgba(16,32,50,.06),0 4px 16px rgba(16,32,50,.07);
+  --shadow-lg:0 8px 40px rgba(16,32,50,.18);
+  --radius:12px; --radius-sm:8px;
+}
+[data-theme="dark"]{
+  --bg:#0c121b; --surface:#152030; --surface-2:#1a273a; --surface-3:#20304a;
+  --border:#2a3b54; --border-strong:#3a5172;
+  --text:#e9eff6; --muted:#9fb1c6; --faint:#7d8fa0;
+  --accent:#5b8cff; --accent-text:#0b1320; --accent-weak:#1c2c47;
+  --ok:#3fce80; --ok-bg:#15311f; --warn:#f0b13e; --warn-bg:#332611; --crit:#ff7a6b; --crit-bg:#39181a;
+  --p1:#ff6a52; --p2:#6f9bff; --p3:#4cc878;
+  --shadow:0 1px 2px rgba(0,0,0,.3),0 6px 20px rgba(0,0,0,.35);
+  --shadow-lg:0 10px 50px rgba(0,0,0,.55);
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{font-family:var(--font-ui);background:var(--bg);color:var(--text);font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased}
+h1,h2,h3,h4{margin:0;font-weight:700;letter-spacing:-.01em;line-height:1.2}
+a{color:var(--accent)}
+button{font-family:inherit;font-size:inherit;cursor:pointer}
+.mono{font-family:var(--font-mono)}
+.skip{position:absolute;left:-999px;top:0;background:var(--accent);color:var(--accent-text);padding:10px 16px;border-radius:0 0 8px 0;z-index:200}
+.skip:focus{left:0}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px;border-radius:4px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+
+/* layout */
+.app{max-width:1240px;margin:0 auto;padding:0 20px 64px}
+header.top{position:sticky;top:0;z-index:50;background:var(--surface);border-bottom:1px solid var(--border);box-shadow:var(--shadow)}
+.top-in{max-width:1240px;margin:0 auto;padding:10px 20px;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.brand{display:flex;align-items:center;gap:11px;margin-right:auto}
+.brand .mark{width:34px;height:34px;border-radius:9px;background:linear-gradient(150deg,var(--accent),#0b3bbf);display:grid;place-items:center;color:#fff;font-weight:800;font-size:15px;flex:none}
+.brand .t{font-weight:800;font-size:15px;letter-spacing:-.02em;line-height:1.05}
+.brand .s{font-size:11px;color:var(--muted);font-weight:600;letter-spacing:.04em;text-transform:uppercase}
+.ctl{display:flex;align-items:center;gap:8px}
+.field{display:flex;flex-direction:column;gap:3px}
+.field label{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--faint);font-weight:700}
+select,input[type=text],input[type=email],input[type=date]{font-family:inherit;font-size:14px;background:var(--surface-2);color:var(--text);border:1px solid var(--border-strong);border-radius:8px;padding:7px 10px}
+.iconbtn{width:38px;height:38px;border-radius:9px;border:1px solid var(--border-strong);background:var(--surface-2);color:var(--text);display:grid;place-items:center;position:relative;font-size:16px}
+.iconbtn:hover{background:var(--surface-3)}
+.badge-count{position:absolute;top:-6px;right:-6px;background:var(--crit);color:#fff;font-size:10px;font-weight:700;min-width:18px;height:18px;border-radius:9px;display:grid;place-items:center;padding:0 4px}
+.btn{border:1px solid var(--border-strong);background:var(--surface-2);color:var(--text);padding:8px 14px;border-radius:9px;font-weight:600;display:inline-flex;align-items:center;gap:7px}
+.btn:hover{background:var(--surface-3)}
+.btn.primary{background:var(--accent);color:var(--accent-text);border-color:transparent}
+.btn.primary:hover{filter:brightness(1.07)}
+.btn.ghost{background:transparent;border-color:transparent;color:var(--muted)}
+.btn.sm{padding:5px 10px;font-size:13px;border-radius:7px}
+.btn.crit{background:var(--crit);color:#fff;border-color:transparent}
+
+nav.tabs{max-width:1240px;margin:0 auto;padding:0 20px;display:flex;gap:2px;overflow-x:auto}
+nav.tabs button{background:none;border:none;border-bottom:3px solid transparent;color:var(--muted);padding:13px 14px;font-weight:600;white-space:nowrap}
+nav.tabs button[aria-current=page]{color:var(--text);border-bottom-color:var(--accent)}
+nav.tabs button:hover{color:var(--text)}
+
+main{padding-top:24px}
+.page-head{display:flex;align-items:flex-end;gap:14px;flex-wrap:wrap;margin-bottom:18px}
+.page-head h2{font-size:23px}
+.page-head p{margin:2px 0 0;color:var(--muted);font-size:13.5px}
+.spacer{flex:1}
+
+.grid{display:grid;gap:16px}
+.cols-3{grid-template-columns:repeat(3,1fr)}
+.cols-2{grid-template-columns:repeat(2,1fr)}
+.cols-4{grid-template-columns:repeat(4,1fr)}
+@media(max-width:860px){.cols-3,.cols-4{grid-template-columns:1fr 1fr}.cols-2{grid-template-columns:1fr}}
+@media(max-width:560px){.cols-3,.cols-4,.cols-2{grid-template-columns:1fr}.top-in{gap:10px}}
+
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow)}
+.card .hd{padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px}
+.card .hd h3{font-size:15px}
+.card .bd{padding:18px}
+.card .bd.tight{padding:0}
+
+.stat{padding:16px 18px}
+.stat .k{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--faint);font-weight:700}
+.stat .v{font-family:var(--font-mono);font-size:30px;font-weight:600;letter-spacing:-.02em;margin-top:4px}
+.stat .sub{font-size:12.5px;color:var(--muted);margin-top:2px}
+
+.bar{height:10px;background:var(--surface-3);border-radius:6px;overflow:hidden;border:1px solid var(--border)}
+.bar > i{display:block;height:100%;background:var(--accent);border-radius:6px}
+.bar.ok > i{background:var(--ok)} .bar.warn > i{background:var(--warn)} .bar.crit > i{background:var(--crit)}
+
+table{width:100%;border-collapse:collapse;font-size:13.5px}
+th,td{text-align:left;padding:10px 14px;border-bottom:1px solid var(--border);vertical-align:middle}
+th{font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--faint);font-weight:700;background:var(--surface-2);position:sticky;top:0}
+tbody tr:hover{background:var(--surface-2)}
+.scroll{max-height:520px;overflow:auto;border-radius:0 0 var(--radius) var(--radius)}
+
+.pill{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:700;padding:3px 9px;border-radius:999px;white-space:nowrap}
+.pill.ok{background:var(--ok-bg);color:var(--ok)} .pill.warn{background:var(--warn-bg);color:var(--warn)} .pill.crit{background:var(--crit-bg);color:var(--crit)}
+.pill.accent{background:var(--accent-weak);color:var(--accent)} .pill.muted{background:var(--surface-3);color:var(--muted)}
+.dot{width:9px;height:9px;border-radius:50%;display:inline-block}
+.p-R{background:var(--p1)} .p-G{background:var(--p3)} .p-B{background:var(--p2)}
+.ptag{font-size:11px;font-weight:700;padding:2px 8px;border-radius:6px;color:#fff}
+.ptag.R{background:var(--p1)} .ptag.B{background:var(--p2)} .ptag.G{background:var(--p3)}
+
+.tierbadge{font-size:11px;font-weight:700;padding:2px 8px;border-radius:6px;border:1px solid var(--border-strong);color:var(--muted)}
+.tierbadge.t1{background:var(--ok-bg);color:var(--ok);border-color:transparent}
+.tierbadge.t2{background:var(--accent-weak);color:var(--accent);border-color:transparent}
+
+/* calendar */
+.cal{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
+.cal .dow{font-size:11px;font-weight:700;color:var(--faint);text-transform:uppercase;text-align:center;padding:4px 0}
+.cell{min-height:78px;border:1px solid var(--border);border-radius:10px;padding:6px 7px;background:var(--surface-2);position:relative;display:flex;flex-direction:column;gap:4px}
+.cell.empty{background:transparent;border:none}
+.cell .dn{font-family:var(--font-mono);font-size:13px;font-weight:600;display:flex;justify-content:space-between;align-items:center}
+.cell .od{font-size:10px;font-weight:700;color:#fff;border-radius:5px;padding:1px 6px}
+.cell.today{outline:2px solid var(--accent);outline-offset:1px}
+.cell .ev{font-size:11px;font-weight:600;border-radius:6px;padding:2px 6px;line-height:1.3;cursor:pointer;border:1px solid transparent}
+.ev.open{background:var(--warn-bg);color:var(--warn);border-color:var(--warn)}
+.ev.elig{background:var(--accent-weak);color:var(--accent);border-color:var(--accent)}
+.ev.bidpend{background:var(--surface-3);color:var(--muted)}
+.ev.sel{background:var(--ok-bg);color:var(--ok);border-color:var(--ok)}
+.ev.avail{background:var(--ok-bg);color:var(--ok);border:1px dashed var(--ok)}
+.ev.locked{background:transparent;color:var(--faint);border:1px dashed var(--border-strong);cursor:not-allowed}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-top:12px}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.sw{width:14px;height:14px;border-radius:4px;border:1px solid var(--border-strong)}
+
+/* candidate rows (fill flow) */
+.cand{display:flex;align-items:center;gap:14px;padding:12px 14px;border:1px solid var(--border);border-radius:10px;background:var(--surface)}
+.cand + .cand{margin-top:8px}
+.cand.top{border-color:var(--ok);box-shadow:0 0 0 1px var(--ok) inset}
+.cand .rank{font-family:var(--font-mono);font-size:18px;font-weight:600;width:26px;color:var(--faint)}
+.cand .who{min-width:120px}
+.cand .who b{font-family:var(--font-mono)}
+.cand .why{display:flex;gap:6px;flex-wrap:wrap;flex:1}
+.cand .hrs{text-align:right;min-width:120px}
+.cand .hrs .big{font-family:var(--font-mono);font-weight:600;font-size:15px}
+.chip{font-size:11px;font-weight:600;padding:2px 8px;border-radius:6px;background:var(--surface-3);color:var(--muted);display:inline-flex;gap:4px;align-items:center}
+.chip.good{background:var(--ok-bg);color:var(--ok)}
+.chip.flag{background:var(--warn-bg);color:var(--warn)}
+
+/* modal */
+.scrim{position:fixed;inset:0;background:rgba(8,16,28,.55);display:grid;place-items:center;padding:20px;z-index:100}
+.modal{background:var(--surface);border:1px solid var(--border);border-radius:16px;box-shadow:var(--shadow-lg);max-width:760px;width:100%;max-height:88vh;overflow:auto}
+.modal .mh{padding:18px 22px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;position:sticky;top:0;background:var(--surface)}
+.modal .mh h3{font-size:18px}
+.modal .mb{padding:22px}
+.modal .mf{padding:16px 22px;border-top:1px solid var(--border);display:flex;gap:10px;justify-content:flex-end;position:sticky;bottom:0;background:var(--surface)}
+
+/* toast */
+#toasts{position:fixed;right:18px;bottom:18px;display:flex;flex-direction:column;gap:10px;z-index:300;max-width:380px}
+.toast{background:var(--surface);border:1px solid var(--border);border-left:4px solid var(--accent);border-radius:10px;box-shadow:var(--shadow-lg);padding:12px 14px;font-size:13.5px;animation:slidein .25s ease}
+.toast.ok{border-left-color:var(--ok)} .toast.warn{border-left-color:var(--warn)}
+.toast b{display:block;margin-bottom:2px}
+@keyframes slidein{from{transform:translateY(8px);opacity:0}to{transform:none;opacity:1}}
+
+.kv{display:grid;grid-template-columns:auto 1fr;gap:6px 16px;font-size:13.5px}
+.kv dt{color:var(--muted)} .kv dd{margin:0;font-weight:600}
+.note{background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:12px 14px;font-size:13px;color:var(--muted)}
+.split{display:grid;grid-template-columns:1fr 1fr;gap:0;border:1px solid var(--border);border-radius:12px;overflow:hidden}
+@media(max-width:600px){.split{grid-template-columns:1fr}}
+.split > div{padding:18px}
+.split .before{background:var(--crit-bg)} .split .after{background:var(--ok-bg)}
+.split h4{font-size:13px;text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px}
+.split .before h4{color:var(--crit)} .split .after h4{color:var(--ok)}
+.split ul{margin:0;padding-left:18px;font-size:13.5px}.split li{margin:5px 0}
+.distrib{display:flex;align-items:flex-end;gap:3px;height:130px;padding-top:8px}
+.distrib .b{flex:1;background:var(--accent);border-radius:3px 3px 0 0;min-height:3px;opacity:.85}
+.footer{margin-top:40px;color:var(--faint);font-size:12px;text-align:center;border-top:1px solid var(--border);padding-top:18px}
+.hl{background:linear-gradient(transparent 60%,var(--accent-weak) 0)}
+</style>
+</head>
+<body>
+<a href="#main" class="skip">Skip to main content</a>
+<header class="top">
+  <div class="top-in">
+    <div class="brand">
+      <div class="mark" aria-hidden="true">MFD</div>
+      <div><div class="t">Overtime Recall System</div><div class="s">Rank-for-Rank · Maui Fire Dept · Demo</div></div>
+    </div>
+    <div class="ctl">
+      <div class="field">
+        <label for="roleSel">Viewing as</label>
+        <select id="roleSel" aria-label="Switch role"></select>
+      </div>
+      <div class="field">
+        <label for="dateLbl">Demo date</label>
+        <div id="dateLbl" class="mono" style="padding:7px 10px;border:1px solid var(--border);border-radius:8px;background:var(--surface-2);font-size:13px"></div>
+      </div>
+      <button class="iconbtn" id="bell" aria-label="Notifications" title="Notifications">🔔<span class="badge-count" id="bellCount" hidden>0</span></button>
+      <button class="iconbtn" id="themeBtn" aria-label="Toggle light/dark theme" title="Toggle theme">◐</button>
+      <button class="btn sm" id="resetBtn" title="Reset the demo to its starting scenario">↺ Reset demo</button>
+    </div>
+  </div>
+  <nav class="tabs" id="tabs" aria-label="Sections"></nav>
+</header>
+<div class="app">
+  <main id="main" tabindex="-1"></main>
+  <div class="footer">
+    Demo prototype · anonymized data · not connected to any live system · simulated text/email confirmations.<br>
+    Built to model the County of Maui Rank-for-Rank Recall Program (eff. 11/1/2025).
+  </div>
+</div>
+<div id="modalRoot"></div>
+<div id="toasts" aria-live="polite" aria-atomic="false"></div>
+
+<script>
+"use strict";
+/* ============================================================ 1. CONFIG & SCHEDULE */
+const FY_CAP=288, MIN_BLOCK=12, STRAIGHT_CAP=34;
+const CLASSES=['Engine','Tanker','Ladder','Hazmat','Rescue','BC Aid'];
+const KELLY=['R','G','B','G','B','R','B','R','G'];            // 9-day cycle, one platoon on-duty per day
+const PLATOON={R:{name:'1st Platoon',color:'var(--p1)'},B:{name:'2nd Platoon',color:'var(--p2)'},G:{name:'3rd Platoon',color:'var(--p3)'}};
+const ANCHOR='2026-06-01';                                    // ANCHOR + KELLY[0]=R  → matches the official June 2026 calendar
+const DEMO_DATE='2026-06-19';                                 // "today" in the demo (circled red / 1st platoon on official cal)
+
+const MS=86400000;
+const pd=s=>{const[y,m,d]=s.split('-').map(Number);return new Date(y,m-1,d,12,0,0);};
+const fmt=s=>pd(s).toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
+const fmtShort=s=>pd(s).toLocaleDateString('en-US',{month:'short',day:'numeric'});
+const addDays=(s,n)=>{const d=pd(s);d.setDate(d.getDate()+n);return d.toISOString().slice(0,10);};
+const cycleIdx=s=>{const diff=Math.round((pd(s)-pd(ANCHOR))/MS);return((diff%9)+9)%9;};
+const onDutyPlatoon=s=>KELLY[cycleIdx(s)];
+const isOnDuty=(m,s)=>onDutyPlatoon(s)===m.platoon;
+const onDutyAtIdx=(plat,idx)=>KELLY[((idx%9)+9)%9]===plat;
+// 4-day-off cycle indices per platoon (the primary recall window)
+const FOURDAY={};
+for(const p of Object.keys(PLATOON)){
+  const set=new Set(); let run=[];
+  for(let i=0;i<18;i++){ if(!onDutyAtIdx(p,i)){run.push(i);} else {if(run.length>=4)run.forEach(x=>set.add(((x%9)+9)%9)); run=[];} }
+  if(run.length>=4)run.forEach(x=>set.add(((x%9)+9)%9));
+  FOURDAY[p]=set;
+}
+const inFourDayOff=(m,s)=>FOURDAY[m.platoon].has(cycleIdx(s));
+const adjacentOnDuty=(m,s)=>{const i=cycleIdx(s);return onDutyAtIdx(m.platoon,i-1)||onDutyAtIdx(m.platoon,i+1);};
+
+/* ============================================================ 2. SEED DATA */
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+const STATIONS=[
+ {id:'s1',name:'Wailuku',battalion:'Central',island:'Maui',companies:[{c:'Engine',min:4},{c:'Ladder',min:4},{c:'Rescue',min:3},{c:'BC Aid',min:1}]},
+ {id:'s2',name:'Kahului',battalion:'Central',island:'Maui',companies:[{c:'Engine',min:4},{c:'Ladder',min:4},{c:'Hazmat',min:3}]},
+ {id:'s3',name:'Pāʻia',battalion:'Central',island:'Maui',companies:[{c:'Engine',min:4}]},
+ {id:'s4',name:'Makawao',battalion:'Upcountry',island:'Maui',companies:[{c:'Engine',min:4},{c:'Tanker',min:3},{c:'BC Aid',min:1}]},
+ {id:'s5',name:'Kula',battalion:'Upcountry',island:'Maui',companies:[{c:'Engine',min:4},{c:'Tanker',min:3}]},
+ {id:'s6',name:'Kīhei',battalion:'South',island:'Maui',companies:[{c:'Engine',min:4},{c:'BC Aid',min:1}]},
+ {id:'s7',name:'Wailea–Mākena',battalion:'South',island:'Maui',companies:[{c:'Engine',min:4},{c:'Tanker',min:3}]},
+ {id:'s8',name:'Lahaina',battalion:'West',island:'Maui',companies:[{c:'Engine',min:4},{c:'BC Aid',min:1}]},
+ {id:'s9',name:'Nāpili',battalion:'West',island:'Maui',companies:[{c:'Engine',min:4}]},
+ {id:'s10',name:'Hāna',battalion:'Hāna',island:'Maui',companies:[{c:'Engine',min:3},{c:'Tanker',min:3},{c:'BC Aid',min:1}]},
+ {id:'s11',name:'Lānaʻi',battalion:'Lānaʻi/Molokaʻi',island:'Lānaʻi',companies:[{c:'Engine',min:3},{c:'Tanker',min:3}]},
+ {id:'s12',name:'Molokaʻi (Hoʻolehua)',battalion:'Lānaʻi/Molokaʻi',island:'Molokaʻi',companies:[{c:'Engine',min:3},{c:'Tanker',min:3},{c:'BC Aid',min:1}]},
+ {id:'s13',name:'Pukalani',battalion:'Upcountry',island:'Maui',companies:[{c:'Engine',min:4}]},
+ {id:'s14',name:'Olowalu',battalion:'West',island:'Maui',companies:[{c:'Engine',min:3}]},
+];
+const stById=id=>STATIONS.find(s=>s.id===id);
+const stByName=n=>STATIONS.find(s=>s.name===n);
+const RANKS=[['FF II',.46],['FF III',.33],['Captain',.18],['BC',.03]];
+function pick(rng,weighted){let r=rng();for(const[v,w]of weighted){if((r-=w)<0)return v;}return weighted[0][0];}
+function sampleHours(rng){const r=rng();let h;if(r<.16)h=rng()*64;else if(r<.78)h=84+rng()*132;else h=216+rng()*72;return Math.min(FY_CAP,Math.round(h/12)*12);}
+
+function buildMembers(){
+  const rng=mulberry32(20260619); const members={}; let id=1001;
+  // weight station selection by number of companies (bigger stations hold more people)
+  const pool=[]; STATIONS.forEach(s=>{const w=s.companies.length+1;for(let i=0;i<w;i++)pool.push(s.id);});
+  for(let n=0;n<200;n++){
+    const stationId=pool[Math.floor(rng()*pool.length)]; const st=stById(stationId);
+    const platoon=['R','G','B'][n%3];
+    const rank=pick(rng,RANKS);
+    const qual=new Set(['Engine']);
+    st.companies.forEach(c=>{if(c.c!=='BC Aid'&&rng()<.7)qual.add(c.c);});
+    if(rng()<.25)qual.add(CLASSES[2+Math.floor(rng()*4)]); // occasional cross-qual into a specialty
+    if(rank==='BC')qual.add('BC Aid');
+    const ql=[...qual].filter(c=>c!=='BC Aid'||rank==='BC'||rng()<.15);
+    members['FF-'+id]={id:'FF-'+id,rank,homeStationId:stationId,platoon,
+      qualifiedClasses:ql.length?ql:['Engine'],
+      fyHours:sampleHours(rng), holdBackHours:rng()<.28?Math.round(rng()*6)*12:0,
+      dayOfPrefs:ql.filter(()=>rng()<.7), suspendedUntil: rng()<.04?'2026-07-15':null};
+    id++;
+  }
+  // ---- hero candidates: guarantee a clean equity story for the June 19 Engine 6 (Kīhei) sick call ----
+  const hero=[
+    {id:'FF-1042',rank:'FF III',homeStationId:'s8',platoon:'B',qualifiedClasses:['Engine','Ladder'],fyHours:24,holdBackHours:48,dayOfPrefs:['Engine','Ladder'],suspendedUntil:null}, // Lahaina/West – lowest hrs, county-wide reach, lots of hold-back
+    {id:'FF-1108',rank:'FF II',homeStationId:'s7',platoon:'B',qualifiedClasses:['Engine','Tanker'],fyHours:60,holdBackHours:12,dayOfPrefs:['Engine'],suspendedUntil:null}, // Wailea–Mākena/South – same battalion
+    {id:'FF-1190',rank:'Captain',homeStationId:'s6',platoon:'B',qualifiedClasses:['Engine'],fyHours:180,holdBackHours:0,dayOfPrefs:['Engine'],suspendedUntil:null}, // Kīhei/South – SAME STATION but near cap → ranked low (equity beats proximity)
+    {id:'FF-1067',rank:'FF II',homeStationId:'s2',platoon:'B',qualifiedClasses:['Engine','Ladder','Hazmat'],fyHours:96,dayOfPrefs:['Engine'],holdBackHours:0,suspendedUntil:null},
+    {id:'FF-1153',rank:'FF III',homeStationId:'s1',platoon:'B',qualifiedClasses:['Engine','Rescue'],fyHours:132,dayOfPrefs:['Engine'],holdBackHours:0,suspendedUntil:null},
+  ];
+  hero.forEach(h=>members[h.id]=h);
+  return members;
+}
+
+function buildSeed(){
+  const members=buildMembers();
+  // hero vacancy: Kīhei Engine, sick call for the June 19 (1st platoon) shift — station can't backfill
+  const vacancies=[
+    {id:'v-hero',stationId:'s6',cls:'Engine',date:DEMO_DATE,segment:'full24',hours:24,type:'unscheduled',
+     status:'open',reason:'Sick call — FF II',shortBy:1,wouldHoldBack:true,assigneeId:null,bids:[]},
+    // a couple more open same-day needs for the command center
+    {id:'v2',stationId:'s4',cls:'Tanker',date:DEMO_DATE,segment:'full24',hours:24,type:'unscheduled',status:'open',reason:'Industrial leave',shortBy:1,wouldHoldBack:false,assigneeId:null,bids:[]},
+    // scheduled (advance / bid) openings — late June
+    {id:'v3',stationId:'s2',cls:'Engine',date:'2026-06-18',segment:'full24',hours:24,type:'scheduled',status:'open',reason:'Approved vacation',shortBy:1,assigneeId:null,bids:['FF-1067']},
+    {id:'v4',stationId:'s1',cls:'Ladder',date:'2026-06-18',segment:'0730-1930',hours:12,type:'scheduled',status:'open',reason:'Training',shortBy:1,assigneeId:null,bids:[]},
+    {id:'v5',stationId:'s8',cls:'Engine',date:'2026-06-23',segment:'full24',hours:24,type:'scheduled',status:'open',reason:'Approved vacation',shortBy:1,assigneeId:null,bids:[]},
+    {id:'v6',stationId:'s5',cls:'Tanker',date:'2026-06-20',segment:'full24',hours:24,type:'scheduled',status:'open',reason:'FMLA',shortBy:1,assigneeId:null,bids:[]},
+  ];
+  return {members,vacancies};
+}
+
+/* ============================================================ 3. STATE STORE */
+const LS='mfd-ot-recall-v1';
+let state;
+function freshState(){const seed=buildSeed();return{role:'bc',theme:'light',demoDate:DEMO_DATE,view:null,
+  members:seed.members,vacancies:seed.vacancies,availability:{},notifications:[],modal:null};}
+function load(){try{const r=localStorage.getItem(LS);if(r){state=JSON.parse(r);state.modal=null;return;}}catch(e){}state=freshState();}
+function save(){try{const{modal,...rest}=state;localStorage.setItem(LS,JSON.stringify(rest));}catch(e){}}
+function resetDemo(){state=freshState();save();render();toast('ok','Demo reset','Back to the June 19 sick-call scenario.');}
+
+/* ============================================================ 4. EQUITY ENGINE */
+function remaining(m){return FY_CAP-m.fyHours;}
+function checks(m,vac){
+  const sameClass=m.qualifiedClasses.includes(vac.cls);
+  const off=!isOnDuty(m,vac.date);
+  const window=inFourDayOff(m,vac.date);
+  const straight=!adjacentOnDuty(m,vac.date);
+  const cap=remaining(m)>=MIN_BLOCK || remaining(m)>0; // remaining-balance rule: any balance <12 still allowed to finish
+  const notSusp=!(m.suspendedUntil && m.suspendedUntil>=vac.date);
+  const notBusy=!state.vacancies.some(v=>v.id!==vac.id&&v.assigneeId===m.id&&v.date===vac.date);
+  return {sameClass,off,window,straight,cap,notSusp,notBusy};
+}
+function eligible(m,vac){const c=checks(m,vac);return c.sameClass&&c.off&&c.window&&c.straight&&c.cap&&c.notSusp&&c.notBusy;}
+function tier(m,vac){const st=stById(vac.stationId),ms=stById(m.homeStationId);
+  if(m.homeStationId===vac.stationId)return 1;                 // same station (≈ same truck/station)
+  if(ms.battalion===st.battalion)return 2;                     // same battalion
+  if(ms.island===st.island)return 3;                           // same island
+  return 4;}                                                   // county-wide
+const TIERLBL={1:'Same station',2:'Same battalion',3:'Same island',4:'County-wide'};
+function rankCandidates(vac){
+  const list=Object.values(state.members).filter(m=>eligible(m,vac));
+  list.sort((a,b)=> a.fyHours-b.fyHours || tier(a,vac)-tier(b,vac) || b.holdBackHours-a.holdBackHours || a.id.localeCompare(b.id));
+  return list;
+}
+
+/* ============================================================ 5. RENDER */
+const $=s=>document.querySelector(s); const root=$('#main');
+const NAV={bc:[['cmd','Command Center'],['create','Create Opportunity'],['equity','Equity Dashboard'],['roster','Roster'],['reports','Reports']],
+  ff:[['home','My Recall'],['opps','Opportunities'],['avail','Availability'],['profile','Profile']]};
+function curMember(){return state.role==='bc'?null:state.members[state.role];}
+function isBC(){return state.role==='bc';}
+
+function render(){
+  document.documentElement.setAttribute('data-theme',state.theme);
+  $('#dateLbl').textContent=fmt(state.demoDate);
+  // role select
+  const sel=$('#roleSel');
+  const feat=['FF-1042','FF-1190','FF-1108'];
+  sel.innerHTML=`<option value="bc">Battalion Chief (admin)</option>`+
+    feat.map(id=>{const m=state.members[id];return `<option value="${id}">${id} · ${m.rank} · ${stById(m.homeStationId).name}</option>`;}).join('');
+  sel.value=state.role;
+  // tabs
+  const items=isBC()?NAV.bc:NAV.ff;
+  if(!items.find(i=>i[0]===state.view))state.view=items[0][0];
+  $('#tabs').innerHTML=items.map(([k,l])=>`<button data-act="nav" data-v="${k}" ${k===state.view?'aria-current="page"':''}>${l}</button>`).join('');
+  // bell
+  const n=state.notifications.length;const bc=$('#bellCount');bc.hidden=!n;bc.textContent=n;
+  // view
+  const V={cmd:viewCmd,create:viewCreate,equity:viewEquity,roster:viewRoster,reports:viewReports,
+           home:viewHome,opps:viewOpps,avail:viewAvail,profile:viewProfile};
+  root.innerHTML=(V[state.view]||(()=>'<p>Not found</p>'))();
+  if(state.modal)renderModal();else $('#modalRoot').innerHTML='';
+  save();
+}
+
+function hoursBar(used,cap=FY_CAP){const pct=Math.min(100,Math.round(used/cap*100));const cls=pct>=90?'crit':pct>=70?'warn':'ok';
+  return `<div class="bar ${cls}"><i style="width:${pct}%"></i></div>`;}
+function vacChip(v){const st=stById(v.stationId);return `${st.name} · ${v.cls}`;}
+
+/* ---------- BC: Command Center ---------- */
+function viewCmd(){
+  const open=state.vacancies.filter(v=>v.status==='open');
+  const today=open.filter(v=>v.date===state.demoDate);
+  const sched=open.filter(v=>v.date>state.demoDate);
+  const filledToday=state.vacancies.filter(v=>v.assigneeId&&v.date===state.demoDate).length;
+  return `<div class="page-head"><div><h2>Command Center</h2><p>${fmt(state.demoDate)} · ${onDutyPlatoon(state.demoDate)===null?'':PLATOON[onDutyPlatoon(state.demoDate)].name} on duty</p></div></div>
+  <div class="grid cols-4" style="margin-bottom:18px">
+    ${statCard('Open today',today.length,today.some(v=>v.wouldHoldBack)?'⚠ '+today.filter(v=>v.wouldHoldBack).length+' would force a hold-back':'needs filling','crit')}
+    ${statCard('Filled today',filledToday,'via recall','ok')}
+    ${statCard('Upcoming (bid)',sched.length,'scheduled openings','')}
+    ${statCard('Members under 50%',Object.values(state.members).filter(m=>m.fyHours<FY_CAP*.5).length,'priority for equity','')}
+  </div>
+  <div class="card"><div class="hd"><h3>Vacancies needing a fill — today</h3><span class="spacer"></span><span class="pill warn">Unscheduled · 30-min window</span></div>
+  <div class="bd tight">${today.length?`<table><thead><tr><th>Station</th><th>Apparatus</th><th>Shift</th><th>Reason</th><th>Status</th><th></th></tr></thead><tbody>
+    ${today.map(v=>{const st=stById(v.stationId);return `<tr>
+      <td><b>${st.name}</b><div style="font-size:11.5px;color:var(--muted)">${st.battalion} · ${st.island}</div></td>
+      <td>${classDot(v.cls)} ${v.cls}</td><td class="mono">${segLabel(v.segment)} <span style="color:var(--muted)">(${v.hours}h)</span></td>
+      <td>${v.reason}</td>
+      <td>${v.wouldHoldBack?'<span class="pill crit">Hold-back risk</span>':'<span class="pill warn">Short '+v.shortBy+'</span>'}</td>
+      <td style="text-align:right"><button class="btn primary sm" data-act="fill" data-id="${v.id}">Fill fairly →</button></td></tr>`;}).join('')}
+    </tbody></table>`:`<div class="bd"><span class="pill ok">All companies at staffing</span></div>`}</div></div>
+  <div style="height:16px"></div>
+  <div class="card"><div class="hd"><h3>Upcoming scheduled openings</h3><span class="spacer"></span><span class="pill accent">Advance · 48-hr bid</span></div>
+  <div class="bd tight"><table><thead><tr><th>Date</th><th>Station</th><th>Apparatus</th><th>Shift</th><th>Bids</th><th></th></tr></thead><tbody>
+   ${sched.map(v=>{const st=stById(v.stationId);return `<tr><td class="mono">${fmtShort(v.date)}</td><td><b>${st.name}</b></td><td>${classDot(v.cls)} ${v.cls}</td><td class="mono">${segLabel(v.segment)}</td>
+     <td>${v.bids.length?`<span class="pill accent">${v.bids.length} bid${v.bids.length>1?'s':''}</span>`:'<span class="pill muted">none yet</span>'}</td>
+     <td style="text-align:right"><button class="btn sm" data-act="fill" data-id="${v.id}">Review & assign</button></td></tr>`;}).join('')}
+  </tbody></table></div></div>`;
+}
+function statCard(k,v,sub,tone){return `<div class="card stat"><div class="k">${k}</div><div class="v" ${tone?`style="color:var(--${tone})"`:''}>${v}</div><div class="sub">${sub}</div></div>`;}
+function classDot(c){return `<span class="dot" style="background:var(--accent);width:7px;height:7px;vertical-align:middle"></span>`;}
+function segLabel(s){return s==='full24'?'24-hour (0730–0730)':s;}
+
+/* ---------- BC: Fill flow (the hero) ---------- */
+function fillModal(vacId){
+  const v=state.vacancies.find(x=>x.id===vacId); const st=stById(v.stationId);
+  const cands=rankCandidates(v);
+  const bidSet=new Set(v.bids||[]);
+  const rows=cands.slice(0,8).map((m,i)=>{
+    const t=tier(m,v); const bid=bidSet.has(m.id);
+    return `<div class="cand ${i===0?'top':''}">
+      <div class="rank">${i+1}</div>
+      <div class="who"><b>${m.id}</b><div style="font-size:11.5px;color:var(--muted)">${m.rank} · ${stById(m.homeStationId).name}</div></div>
+      <div class="why">
+        <span class="tierbadge ${t<=2?'t'+t:''}">${TIERLBL[t]}</span>
+        <span class="chip good">✓ ${v.cls}-qualified</span>
+        <span class="chip good">✓ 4-day off</span>
+        <span class="chip good">✓ 34-hr OK</span>
+        ${bid?'<span class="chip">🖐 bid</span>':''}
+        ${m.holdBackHours?`<span class="chip flag">held back ${m.holdBackHours}h</span>`:''}
+      </div>
+      <div class="hrs"><div class="big" style="color:var(--${m.fyHours<FY_CAP*.5?'ok':m.fyHours>=FY_CAP*.9?'crit':'text'})">${m.fyHours} / ${FY_CAP}h</div>
+        <div style="font-size:11px;color:var(--muted)">${remaining(m)}h remaining</div></div>
+      <button class="btn primary sm" data-act="assign" data-vac="${v.id}" data-m="${m.id}">Assign</button>
+    </div>`;}).join('');
+  return modalShell(`Fill vacancy — ${st.name} ${v.cls}`,`
+    <div class="kv" style="margin-bottom:14px">
+      <dt>Station</dt><dd>${st.name} · ${st.battalion} · ${st.island}</dd>
+      <dt>Apparatus</dt><dd>${v.cls} (min staffing ${st.companies.find(c=>c.c===v.cls).min})</dd>
+      <dt>Shift</dt><dd>${fmt(v.date)} · ${segLabel(v.segment)} · ${v.hours}h</dd>
+      <dt>Reason</dt><dd>${v.reason} (${v.type})</dd>
+    </div>
+    ${v.wouldHoldBack?`<div class="note" style="border-color:var(--crit);color:var(--crit);background:var(--crit-bg);margin-bottom:14px">
+      <b>Today's manual outcome:</b> no one at ${st.name} can backfill → an off-going member gets <b>held back</b> to hold minimum staffing. Those hours don't even count toward their recall total.</div>`:''}
+    <h4 style="margin:0 0 4px">Eligible counterparts — ranked by fewest recall hours (equity-first)</h4>
+    <p style="margin:0 0 14px;color:var(--muted);font-size:13px">${cands.length} eligible county-wide. Similar-function (${v.cls}↔${v.cls}), within 4-day off, under the 34-hr cap. Lowest-hours member is offered first.</p>
+    ${rows||'<div class="note">No eligible counterparts found.</div>'}
+  `,`<button class="btn" data-act="closemodal">Close</button>`);
+}
+
+/* ---------- BC: Equity dashboard ---------- */
+function viewEquity(){
+  const ms=Object.values(state.members); const hrs=ms.map(m=>m.fyHours);
+  const avg=Math.round(hrs.reduce((a,b)=>a+b,0)/ms.length);
+  const min=Math.min(...hrs),max=Math.max(...hrs);
+  // histogram in 24h buckets
+  const buckets=Array(13).fill(0); hrs.forEach(h=>buckets[Math.min(12,Math.floor(h/24))]++);
+  const bmax=Math.max(...buckets);
+  const low=[...ms].sort((a,b)=>a.fyHours-b.fyHours).slice(0,6);
+  // per-class spread
+  const byClass=CLASSES.map(c=>{const g=ms.filter(m=>m.qualifiedClasses.includes(c));const h=g.map(x=>x.fyHours);
+    return{c,n:g.length,avg:h.length?Math.round(h.reduce((a,b)=>a+b,0)/h.length):0};});
+  return `<div class="page-head"><div><h2>Equity Dashboard</h2><p>Overtime distribution across all ${ms.length} ranked members this fiscal year (cap ${FY_CAP}h each)</p></div></div>
+  <div class="grid cols-4" style="margin-bottom:18px">
+    ${statCard('Avg hours / member',avg+'h','target: even spread','')}
+    ${statCard('Spread (min–max)',min+'–'+max+'h',(max-min)+'h gap to close',(max-min)>180?'warn':'ok')}
+    ${statCard('Under 50% of cap',ms.filter(m=>m.fyHours<FY_CAP*.5).length,'first in line','ok')}
+    ${statCard('Within 24h of cap',ms.filter(m=>remaining(m)<=24).length,'nearly maxed','warn')}
+  </div>
+  <div class="grid cols-2">
+    <div class="card"><div class="hd"><h3>Hours distribution</h3></div><div class="bd">
+      <div class="distrib">${buckets.map(b=>`<div class="b" style="height:${Math.max(3,Math.round(b/bmax*120))}px" title="${b} members"></div>`).join('')}</div>
+      <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-top:6px"><span>0h</span><span>144h</span><span>${FY_CAP}h</span></div>
+      <p class="note" style="margin-top:14px">Equity-first assignment pushes this distribution toward a single tall column near the average — everyone offered a fair share of the ${FY_CAP} hours.</p>
+    </div></div>
+    <div class="card"><div class="hd"><h3>Lowest-hours members (next in line)</h3></div><div class="bd tight"><table><tbody>
+      ${low.map(m=>`<tr><td><b class="mono">${m.id}</b> <span class="ptag ${m.platoon}">${m.platoon}</span></td><td>${stById(m.homeStationId).name}</td>
+      <td style="width:140px">${hoursBar(m.fyHours)}</td><td class="mono" style="text-align:right">${m.fyHours}h${m.holdBackHours?` <span class="pill crit" title="hold-back hours, not counted">+${m.holdBackHours} HB</span>`:''}</td></tr>`).join('')}
+    </tbody></table></div></div>
+  </div>
+  <div style="height:16px"></div>
+  <div class="card"><div class="hd"><h3>Average hours by apparatus pool</h3></div><div class="bd tight"><table><thead><tr><th>Apparatus</th><th>Qualified members</th><th>Avg hours</th><th></th></tr></thead><tbody>
+    ${byClass.map(b=>`<tr><td>${b.c}</td><td>${b.n}</td><td class="mono">${b.avg}h</td><td style="width:40%">${hoursBar(b.avg)}</td></tr>`).join('')}
+  </tbody></table></div></div>`;
+}
+
+/* ---------- BC: Roster ---------- */
+function viewRoster(){
+  const ms=Object.values(state.members).sort((a,b)=>a.fyHours-b.fyHours);
+  return `<div class="page-head"><div><h2>Roster</h2><p>${ms.length} ranked members · sorted by recall hours (lowest first)</p></div>
+   <span class="spacer"></span><input type="text" id="rosterQ" placeholder="Filter by ID, station, rank…" oninput="filterRoster(this.value)" style="min-width:240px"></div>
+  <div class="card"><div class="bd tight"><div class="scroll"><table><thead><tr><th>ID</th><th>Rank</th><th>Station</th><th>Plt</th><th>Qualified</th><th>Recall hrs</th><th>Status</th><th></th></tr></thead><tbody id="rosterBody">
+    ${ms.map(rosterRow).join('')}
+  </tbody></table></div></div></div>`;
+}
+function rosterRow(m){const susp=m.suspendedUntil&&m.suspendedUntil>=state.demoDate;
+  return `<tr data-q="${(m.id+' '+m.rank+' '+stById(m.homeStationId).name+' '+m.platoon).toLowerCase()}">
+   <td><b class="mono">${m.id}</b></td><td>${m.rank}</td><td>${stById(m.homeStationId).name}</td>
+   <td><span class="ptag ${m.platoon}">${m.platoon}</span></td>
+   <td style="font-size:12px;color:var(--muted)">${m.qualifiedClasses.join(', ')}</td>
+   <td style="min-width:150px">${hoursBar(m.fyHours)}<span class="mono" style="font-size:11px">${m.fyHours}/${FY_CAP}h${m.holdBackHours?' (+'+m.holdBackHours+' HB)':''}</span></td>
+   <td>${susp?'<span class="pill crit">Suspended</span>':'<span class="pill ok">Eligible</span>'}</td>
+   <td style="text-align:right"><button class="btn sm" data-act="suspend" data-m="${m.id}">${susp?'Reinstate':'Suspend'}</button></td></tr>`;}
+
+/* ---------- BC: Create opportunity ---------- */
+function viewCreate(){
+  return `<div class="page-head"><div><h2>Create Opportunity</h2><p>Open a scheduled (advance) vacancy and notify eligible counterparts</p></div></div>
+  <div class="card" style="max-width:560px"><div class="bd">
+    <div class="grid" style="gap:14px">
+      <div class="field"><label for="cStation">Station</label><select id="cStation">${STATIONS.map(s=>`<option value="${s.id}">${s.name} (${s.battalion})</option>`).join('')}</select></div>
+      <div class="field"><label for="cClass">Apparatus</label><select id="cClass">${CLASSES.map(c=>`<option>${c}</option>`).join('')}</select></div>
+      <div class="field"><label for="cDate">Shift date</label><input type="date" id="cDate" value="${addDays(state.demoDate,3)}"></div>
+      <div class="field"><label for="cSeg">Coverage</label><select id="cSeg"><option value="full24">24-hour (0730–0730)</option><option value="0730-1930">Day (0730–1930, 12h)</option><option value="1930-0730">Night (1930–0730, 12h)</option></select></div>
+      <div class="field"><label for="cReason">Reason</label><select id="cReason"><option>Approved vacation</option><option>Training</option><option>FMLA</option><option>Comp time off</option><option>Industrial leave</option></select></div>
+      <button class="btn primary" data-act="createvac">Open opportunity & notify</button>
+    </div>
+  </div></div>`;
+}
+
+/* ---------- BC: Reports ---------- */
+function viewReports(){
+  return `<div class="page-head"><div><h2>Reports</h2><p>Export recall hours and assignments for the program review</p></div></div>
+  <div class="grid cols-2">
+   <div class="card"><div class="hd"><h3>Member recall hours (CSV)</h3></div><div class="bd"><p style="margin-top:0;color:var(--muted)">All members with fiscal-year recall hours, hold-back hours, station, and platoon.</p><button class="btn primary" data-act="csvHours">↓ Download hours.csv</button></div></div>
+   <div class="card"><div class="hd"><h3>Assignments to date (CSV)</h3></div><div class="bd"><p style="margin-top:0;color:var(--muted)">Every recall assignment made in this session, with station, apparatus, date, and hours.</p><button class="btn primary" data-act="csvAssign">↓ Download assignments.csv</button></div></div>
+  </div>
+  <div style="height:16px"></div>
+  <div class="card"><div class="hd"><h3>Program snapshot</h3></div><div class="bd"><dl class="kv">
+    <dt>Fiscal year cap / member</dt><dd>${FY_CAP} hours</dd>
+    <dt>Members offered &lt; 50% of cap</dt><dd>${Object.values(state.members).filter(m=>m.fyHours<FY_CAP*.5).length}</dd>
+    <dt>Total recall hours assigned (session)</dt><dd>${state.vacancies.filter(v=>v.assigneeId).reduce((a,v)=>a+v.hours,0)}h</dd>
+    <dt>Hold-back hours logged (not counted vs cap)</dt><dd>${Object.values(state.members).reduce((a,m)=>a+(m.holdBackHours||0),0)}h</dd>
+  </dl></div></div>`;
+}
+
+/* ---------- FF: My Recall ---------- */
+function viewHome(){
+  const m=curMember(); const pct=Math.round(m.fyHours/FY_CAP*100);
+  const all=Object.values(state.members).filter(x=>x.qualifiedClasses.some(c=>m.qualifiedClasses.includes(c)));
+  const fewer=all.filter(x=>x.fyHours>m.fyHours).length; const standing=Math.round(fewer/all.length*100);
+  const mine=state.vacancies.filter(v=>v.assigneeId===m.id).sort((a,b)=>a.date.localeCompare(b.date));
+  const myBids=state.vacancies.filter(v=>(v.bids||[]).includes(m.id)&&!v.assigneeId);
+  return `<div class="page-head"><div><h2>My Recall</h2><p>${m.id} · ${m.rank} · ${stById(m.homeStationId).name} · <span class="ptag ${m.platoon}">${m.platoon}</span> ${PLATOON[m.platoon].name}</p></div></div>
+  <div class="grid cols-3" style="margin-bottom:18px">
+    <div class="card stat"><div class="k">Recall hours this FY</div><div class="v">${m.fyHours}<span style="font-size:16px;color:var(--muted)"> / ${FY_CAP}h</span></div>
+      <div style="margin-top:10px">${hoursBar(m.fyHours)}</div><div class="sub">${remaining(m)}h remaining of your guarantee</div></div>
+    <div class="card stat"><div class="k">Hold-back hours</div><div class="v" style="color:var(--warn)">${m.holdBackHours||0}<span style="font-size:16px;color:var(--muted)">h</span></div>
+      <div class="sub">Held for min staffing — <b>not</b> counted against your ${FY_CAP}h</div></div>
+    <div class="card stat"><div class="k">Equity standing</div><div class="v" style="color:var(--ok)">${standing}%</div>
+      <div class="sub">You have fewer recall hours than ${standing}% of your apparatus pool → <b>prioritized</b></div></div>
+  </div>
+  <div class="grid cols-2">
+    <div class="card"><div class="hd"><h3>My upcoming assignments</h3></div><div class="bd tight">
+      ${mine.length?`<table><tbody>${mine.map(v=>`<tr><td class="mono">${fmtShort(v.date)}</td><td><b>${stById(v.stationId).name}</b> · ${v.cls}</td><td class="mono">${v.hours}h</td><td><span class="pill ok">Selected</span></td></tr>`).join('')}</tbody></table>`:'<div class="bd"><span class="pill muted">No assignments yet</span></div>'}
+    </div></div>
+    <div class="card"><div class="hd"><h3>My open bids</h3></div><div class="bd tight">
+      ${myBids.length?`<table><tbody>${myBids.map(v=>`<tr><td class="mono">${fmtShort(v.date)}</td><td><b>${stById(v.stationId).name}</b> · ${v.cls}</td><td><span class="pill muted">Pending</span></td></tr>`).join('')}</tbody></table>`:'<div class="bd"><span class="pill muted">No active bids — see Opportunities</span></div>'}
+    </div></div>
+  </div>`;
+}
+
+/* ---------- FF: Opportunities (bid calendar) ---------- */
+function viewOpps(){
+  const m=curMember();
+  return `<div class="page-head"><div><h2>Opportunities</h2><p>Bid on openings in your eligible window — your upcoming 4-day off (${PLATOON[m.platoon].name})</p></div></div>
+  ${calendar(m,'opps')}
+  <div class="legend">
+    <span><span class="sw" style="background:var(--accent-weak);border-color:var(--accent)"></span> Eligible to bid</span>
+    <span><span class="sw" style="background:var(--surface-3)"></span> Bid placed (Pending)</span>
+    <span><span class="sw" style="background:var(--ok-bg);border-color:var(--ok)"></span> Selected</span>
+    <span><span class="sw" style="background:transparent;border:1px dashed var(--border-strong)"></span> Outside your window</span>
+  </div>
+  <p class="note" style="margin-top:14px">You can only bid inside your eligible 4-day-off window. Openings outside it are visible but locked — and the system blocks anything that would break the 34-hour continuous-work cap.</p>`;
+}
+
+/* ---------- FF: Availability (day-of) ---------- */
+function viewAvail(){
+  const m=curMember();
+  return `<div class="page-head"><div><h2>Day-Of Availability</h2><p>Mark the days you're available for same-day recall (must be free for the entire shift)</p></div></div>
+  ${calendar(m,'avail')}
+  <div class="legend">
+    <span><span class="sw" style="background:var(--ok-bg);border:1px dashed var(--ok)"></span> You're available</span>
+    <span><span class="sw" style="background:var(--surface-2)"></span> Eligible day (tap to add)</span>
+    <span><span class="sw" style="background:transparent;border:1px dashed var(--border-strong)"></span> On duty / outside window</span>
+  </div>
+  <p class="note" style="margin-top:14px">Your Day-Of preferences: <b>${(m.dayOfPrefs&&m.dayOfPrefs.length)?m.dayOfPrefs.join(', '):'none set'}</b> — you'll only be offered those apparatus. Update in Profile.</p>`;
+}
+
+function calendar(m,mode){
+  const start='2026-06-01'; const first=pd(start); const lead=first.getDay(); const days=30;
+  let cells='';
+  for(let i=0;i<lead;i++)cells+='<div class="cell empty"></div>';
+  for(let d=1;d<=days;d++){
+    const ds=`2026-06-${String(d).padStart(2,'0')}`;
+    const plat=onDutyPlatoon(ds); const today=ds===state.demoDate;
+    const onDuty=isOnDuty(m,ds); const elig=inFourDayOff(m,ds)&&!adjacentOnDuty(m,ds)&&!onDuty;
+    let ev='';
+    if(mode==='opps'){
+      const v=state.vacancies.find(x=>x.date===ds&&x.status==='open'&&x.type==='scheduled');
+      if(v){const can=eligible(m,v); const bid=(v.bids||[]).includes(m.id);
+        ev=`<div class="ev ${bid?'bidpend':can?'elig':'locked'}" ${can&&!bid?`data-act="bid" data-id="${v.id}"`:''} title="${stById(v.stationId).name} ${v.cls}">${stById(v.stationId).name.split('–')[0]} ${v.cls}${bid?' ·pending':''}</div>`;}
+      const won=state.vacancies.find(x=>x.date===ds&&x.assigneeId===m.id);
+      if(won)ev+=`<div class="ev sel">✓ ${stById(won.stationId).name} ${won.cls}</div>`;
+    } else {
+      const av=(state.availability[m.id]||[]).includes(ds);
+      if(av)ev=`<div class="ev avail" data-act="unavail" data-d="${ds}">✓ Available</div>`;
+      else if(elig)ev=`<div class="ev" style="background:var(--surface)" data-act="setavail" data-d="${ds}">+ Add</div>`;
+    }
+    cells+=`<div class="cell ${today?'today':''}">
+      <div class="dn"><span>${d}</span><span class="od" style="background:${PLATOON[plat].color}">${plat}</span></div>
+      ${onDuty?'<div style="font-size:10px;color:var(--muted)">On duty</div>':''}
+      ${(!onDuty&&elig&&mode==='opps'&&!ev)?'<div style="font-size:10px;color:var(--ok)">Eligible</div>':''}
+      ${ev}</div>`;
+  }
+  return `<div class="card"><div class="hd"><h3>June 2026</h3><span class="spacer"></span>
+    <span class="legend" style="margin:0"><span><span class="dot p-R"></span>1st</span><span><span class="dot p-B"></span>2nd</span><span><span class="dot p-G"></span>3rd</span></span></div>
+    <div class="bd"><div class="cal">${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(x=>`<div class="dow">${x}</div>`).join('')}${cells}</div></div></div>`;
+}
+
+/* ---------- FF: Profile ---------- */
+function viewProfile(){
+  const m=curMember();
+  return `<div class="page-head"><div><h2>Profile</h2><p>${m.id} — contact info & Day-Of apparatus preferences</p></div></div>
+  <div class="grid cols-2">
+   <div class="card"><div class="hd"><h3>Contact (for confirmations)</h3></div><div class="bd"><dl class="kv">
+     <dt>Member ID</dt><dd class="mono">${m.id}</dd><dt>Rank</dt><dd>${m.rank}</dd>
+     <dt>Home station</dt><dd>${stById(m.homeStationId).name} · ${stById(m.homeStationId).battalion}</dd>
+     <dt>Platoon</dt><dd><span class="ptag ${m.platoon}">${m.platoon}</span> ${PLATOON[m.platoon].name}</dd>
+     <dt>Mobile</dt><dd class="mono">808-555-${m.id.slice(-4)}</dd><dt>Email</dt><dd class="mono">${m.id.toLowerCase()}@mfd.demo</dd>
+   </dl><p class="note" style="margin-top:14px">Recall confirmations are sent here by text + email (simulated in this demo).</p></div></div>
+   <div class="card"><div class="hd"><h3>Day-Of apparatus preferences</h3></div><div class="bd">
+     <p style="margin-top:0;color:var(--muted);font-size:13px">You'll only be offered same-day recall on the apparatus you're qualified for AND have checked here.</p>
+     ${m.qualifiedClasses.map(c=>`<label style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">
+       <input type="checkbox" ${(m.dayOfPrefs||[]).includes(c)?'checked':''} data-act="togglePref" data-c="${c}"> <b>${c}</b> <span class="pill muted" style="margin-left:auto">qualified</span></label>`).join('')}
+   </div></div>
+  </div>`;
+}
+
+/* ============================================================ 6. ACTIONS */
+function toast(kind,title,msg){const el=document.createElement('div');el.className='toast '+(kind||'');el.innerHTML=`<b>${title}</b>${msg||''}`;
+  $('#toasts').appendChild(el);setTimeout(()=>el.remove(),5200);}
+function notify(text){state.notifications.unshift({text,ts:fmt(state.demoDate)});}
+
+function assign(vacId,mId){
+  const v=state.vacancies.find(x=>x.id===vacId); const m=state.members[mId];
+  v.assigneeId=mId; v.status='filled';
+  m.fyHours=Math.min(FY_CAP,m.fyHours+v.hours);
+  notify(`${m.id} assigned to ${stById(v.stationId).name} ${v.cls} (${fmtShort(v.date)}, ${v.hours}h).`);
+  state.modal=null; save();
+  // show the "today vs system" payoff for the hero
+  if(vacId==='v-hero'){state.modal={type:'payoff',m:mId,v:vacId};}
+  render();
+  toast('ok','Assignment confirmed',`${m.id} → ${stById(v.stationId).name} ${v.cls}. Text + email sent (simulated).`);
+}
+function payoffModal(d){
+  const v=state.vacancies.find(x=>x.id===d.v); const m=state.members[d.m]; const st=stById(v.stationId);
+  return modalShell('Vacancy filled — fairly, county-wide',`
+   <div class="split">
+     <div class="before"><h4>✕ Today (manual)</h4><ul>
+       <li>No one at ${st.name} can backfill the ${v.cls}.</li>
+       <li>An off-going member is <b>held back</b> to hold minimum staffing.</li>
+       <li>They miss their time off; the hours don't count toward recall.</li>
+       <li>Overtime stays concentrated on whoever's nearby.</li></ul></div>
+     <div class="after"><h4>✓ With the system</h4><ul>
+       <li><b>${m.id}</b> (${stById(m.homeStationId).name}, ${stById(m.homeStationId).battalion}) was offered first — they had the <b>fewest recall hours (${m.fyHours-v.hours}h)</b>.</li>
+       <li>Found county-wide in seconds via similar-function matching.</li>
+       <li>Minimum staffing restored; <b>nobody gets stuck</b>.</li>
+       <li>Overtime levels toward the ${FY_CAP}h guarantee for everyone.</li></ul></div>
+   </div>
+   <p class="note" style="margin-top:16px">This is the gap between a signed policy and a working tool. The policy already promises equitable distribution and county-wide recall — the system is what actually delivers it.</p>
+  `,`<button class="btn primary" data-act="closemodal">Got it</button>`);
+}
+function placeBid(vacId){const m=curMember();const v=state.vacancies.find(x=>x.id===vacId);
+  if(!v.bids)v.bids=[];if(!v.bids.includes(m.id))v.bids.push(m.id);
+  save();render();toast('ok','Bid placed',`Pending for ${stById(v.stationId).name} ${v.cls} on ${fmtShort(v.date)}.`);}
+function setAvail(ds,on){const m=curMember();const arr=state.availability[m.id]||(state.availability[m.id]=[]);
+  const i=arr.indexOf(ds);if(on&&i<0)arr.push(ds);if(!on&&i>=0)arr.splice(i,1);save();render();}
+function suspend(mId){const m=state.members[mId];m.suspendedUntil=(m.suspendedUntil&&m.suspendedUntil>=state.demoDate)?null:'2026-07-15';
+  save();render();toast('warn','Roster updated',`${m.id} ${m.suspendedUntil?'suspended from program':'reinstated'}.`);}
+function togglePref(c){const m=curMember();const a=m.dayOfPrefs||(m.dayOfPrefs=[]);const i=a.indexOf(c);
+  if(i<0)a.push(c);else a.splice(i,1);save();render();}
+function createVac(){const stationId=$('#cStation').value,cls=$('#cClass').value,date=$('#cDate').value,segment=$('#cSeg').value,reason=$('#cReason').value;
+  if(!date){toast('warn','Pick a date');return;}
+  const hours=segment==='full24'?24:12;const id='vc'+Date.now();
+  state.vacancies.push({id,stationId,cls,date,segment,hours,type:'scheduled',status:'open',reason,shortBy:1,assigneeId:null,bids:[]});
+  notify(`Opportunity opened: ${stById(stationId).name} ${cls} on ${fmtShort(date)} — eligible counterparts notified.`);
+  save();state.view='cmd';render();toast('ok','Opportunity opened','Eligible counterparts notified (simulated).');}
+function downloadCSV(name,rows){const csv=rows.map(r=>r.map(x=>`"${String(x).replace(/"/g,'""')}"`).join(',')).join('\n');
+  const b=new Blob([csv],{type:'text/csv'});const u=URL.createObjectURL(b);const a=document.createElement('a');a.href=u;a.download=name;a.click();URL.revokeObjectURL(u);
+  toast('ok','Exported',name);}
+function csvHours(){const rows=[['Member','Rank','Station','Battalion','Platoon','RecallHours','HoldBackHours','RemainingOfCap']];
+  Object.values(state.members).sort((a,b)=>a.fyHours-b.fyHours).forEach(m=>rows.push([m.id,m.rank,stById(m.homeStationId).name,stById(m.homeStationId).battalion,m.platoon,m.fyHours,m.holdBackHours||0,remaining(m)]));
+  downloadCSV('recall-hours.csv',rows);}
+function csvAssign(){const rows=[['Member','Station','Apparatus','Date','Hours','Type','Reason']];
+  state.vacancies.filter(v=>v.assigneeId).forEach(v=>rows.push([v.assigneeId,stById(v.stationId).name,v.cls,v.date,v.hours,v.type,v.reason]));
+  if(rows.length===1)rows.push(['(no assignments yet this session)','','','','','','']);
+  downloadCSV('assignments.csv',rows);}
+
+window.filterRoster=function(q){q=q.toLowerCase();document.querySelectorAll('#rosterBody tr').forEach(tr=>{tr.style.display=tr.dataset.q.includes(q)?'':'none';});};
+
+/* ---------- modal plumbing ---------- */
+function modalShell(title,body,footer){return `<div class="scrim" data-act="scrim"><div class="modal" role="dialog" aria-modal="true" aria-label="${title}">
+  <div class="mh"><h3>${title}</h3><span class="spacer" style="flex:1"></span><button class="iconbtn" data-act="closemodal" aria-label="Close">✕</button></div>
+  <div class="mb">${body}</div><div class="mf">${footer||''}</div></div></div>`;}
+function renderModal(){const md=state.modal;let html='';
+  if(md.type==='fill')html=fillModal(md.id);
+  else if(md.type==='payoff')html=payoffModal(md);
+  $('#modalRoot').innerHTML=html;
+  const f=$('#modalRoot .modal');if(f)f.querySelector('button,select,input,a')?.focus();}
+
+/* ---------- global event delegation ---------- */
+document.addEventListener('click',e=>{
+  const t=e.target.closest('[data-act]'); if(!t)return; const a=t.dataset.act;
+  if(a==='nav'){state.view=t.dataset.v;render();}
+  else if(a==='fill'){state.modal={type:'fill',id:t.dataset.id};render();}
+  else if(a==='assign'){assign(t.dataset.vac,t.dataset.m);}
+  else if(a==='closemodal'||a==='scrim'){if(a==='scrim'&&e.target!==t)return;state.modal=null;render();}
+  else if(a==='bid'){placeBid(t.dataset.id);}
+  else if(a==='setavail'){setAvail(t.dataset.d,true);}
+  else if(a==='unavail'){setAvail(t.dataset.d,false);}
+  else if(a==='suspend'){suspend(t.dataset.m);}
+  else if(a==='togglePref'){togglePref(t.dataset.c);}
+  else if(a==='createvac'){createVac();}
+  else if(a==='csvHours'){csvHours();}
+  else if(a==='csvAssign'){csvAssign();}
+});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&state.modal){state.modal=null;render();}});
+$('#roleSel').addEventListener('change',e=>{state.role=e.target.value;state.view=null;render();});
+$('#themeBtn').addEventListener('click',()=>{state.theme=state.theme==='light'?'dark':'light';render();});
+$('#resetBtn').addEventListener('click',resetDemo);
+$('#bell').addEventListener('click',()=>{
+  if(!state.notifications.length){toast('','No notifications','');return;}
+  state.modal=null;
+  alertList();
+});
+function alertList(){const body=state.notifications.slice(0,12).map(n=>`<div style="padding:10px 0;border-bottom:1px solid var(--border)"><div>${n.text}</div><div style="font-size:11px;color:var(--muted)">${n.ts}</div></div>`).join('');
+  $('#modalRoot').innerHTML=modalShell('Notifications',body||'<p>None</p>',`<button class="btn" data-act="closemodal">Close</button><button class="btn ghost" onclick="state.notifications=[];this.closest('.scrim').remove();document.getElementById('bellCount').hidden=true">Clear all</button>`);}
+
+/* ============================================================ 7. INIT */
+load();
+if(!state.notifications.length){notify('Sick call at Kīhei — Engine short 1 for today\'s shift. Recall opportunity open.');}
+render();
+</script>
+</body>
+</html>
