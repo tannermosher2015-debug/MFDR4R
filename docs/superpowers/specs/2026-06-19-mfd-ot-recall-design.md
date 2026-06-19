@@ -113,3 +113,26 @@ status), strong neutral type (Archivo). No logos.
 Real auth, multi-user sync, real SMS/email, a backend/database, county-IT integration. These
 are the **rollout** phase (a Next.js + backend follow-on), for which the data model and equity
 engine here are designed to port directly.
+
+## Update 2026-06-19 — authenticity pass (from MFD's real First Due reports)
+
+After reviewing MFD's actual daily *Schedule Report* and 7-day *Shift Board* (both First Due
+outputs), the roster + terminology were rebuilt to match reality:
+
+- **Real station map** (towns + islands): Wailuku (Engine, Mini), Pāʻia, Lahaina (Engine/Ladder/
+  Tanker, Bn 2), Kaunakakai *(Molokaʻi, remote)*, Makawao, **Kīhei (Engine 6 — hero)**, Hāna
+  *(remote)*, Lānaʻi *(remote)*, Hoʻolehua *(Molokaʻi, remote)*, Kahului (Engine/Tanker/**Hazmat**/
+  **Rescue**, Bn 1), Nāpili, Pukoʻo *(Molokaʻi, remote)*, Kula (Engine/Tanker), Wailea (Engine/
+  Ladder/Tanker). Apparatus totals: Engine ×14, **Tanker ×7**, **Mini ×1**, Ladder ×2, Hazmat ×1,
+  Rescue ×1.
+- **Ranks:** FF I, FF II, FF III, Captain, BC. Recall is **rank-for-rank** — a vacancy carries a
+  rank *and* apparatus class, and eligible counterparts must match **both** (e.g. `Vacancy FF3`,
+  `Vacancy LCAP` in First Due). Hero vacancy = **FF I · Engine** sick call at Kīhei.
+- **Tiering:** same station → same island → county-wide (off-island), since the reports show only
+  Bn 1 (Kahului) / Bn 2 (Lahaina) + remote. This also surfaces the policy's "regardless of island."
+- **Terminology:** staffing ratios (on/required, e.g. `4/5`), Watch / **Remote-72** language, and
+  real absence codes as vacancy reasons (`VAC, SL, FL, SA, SUBO`).
+- **Discovery:** First Due is MFD's scheduling system of record (and the policy's §VI notification
+  channel) — so this tool is framed as the *fair-recall complement* that fills the holes First Due
+  surfaces, not a replacement.
+- IDs stay **anonymized** (the reports contain real personnel).

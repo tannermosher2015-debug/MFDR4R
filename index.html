@@ -220,7 +220,9 @@ tbody tr:hover{background:var(--surface-2)}
 "use strict";
 /* ============================================================ 1. CONFIG & SCHEDULE */
 const FY_CAP=288, MIN_BLOCK=12, STRAIGHT_CAP=34;
-const CLASSES=['Engine','Tanker','Ladder','Hazmat','Rescue','BC Aid'];
+const CLASSES=['Engine','Mini','Tanker','Ladder','Hazmat','Rescue'];
+const REASONS={SL:'Sick Leave',VAC:'Vacation',FL:'Funeral Leave',SA:'Special Assignment',SUBO:'Substitution (requesting)',RELO:'Relocation drive',IL:'Industrial Leave'};
+const reasonLbl=c=>REASONS[c]?`${REASONS[c]} [${c}]`:c;
 const KELLY=['R','G','B','G','B','R','B','R','G'];            // 9-day cycle, one platoon on-duty per day
 const PLATOON={R:{name:'1st Platoon',color:'var(--p1)'},B:{name:'2nd Platoon',color:'var(--p2)'},G:{name:'3rd Platoon',color:'var(--p3)'}};
 const ANCHOR='2026-06-01';                                    // ANCHOR + KELLY[0]=R  → matches the official June 2026 calendar
@@ -249,24 +251,23 @@ const adjacentOnDuty=(m,s)=>{const i=cycleIdx(s);return onDutyAtIdx(m.platoon,i-
 /* ============================================================ 2. SEED DATA */
 function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
 const STATIONS=[
- {id:'s1',name:'Wailuku',battalion:'Central',island:'Maui',companies:[{c:'Engine',min:4},{c:'Ladder',min:4},{c:'Rescue',min:3},{c:'BC Aid',min:1}]},
- {id:'s2',name:'Kahului',battalion:'Central',island:'Maui',companies:[{c:'Engine',min:4},{c:'Ladder',min:4},{c:'Hazmat',min:3}]},
- {id:'s3',name:'Pāʻia',battalion:'Central',island:'Maui',companies:[{c:'Engine',min:4}]},
- {id:'s4',name:'Makawao',battalion:'Upcountry',island:'Maui',companies:[{c:'Engine',min:4},{c:'Tanker',min:3},{c:'BC Aid',min:1}]},
- {id:'s5',name:'Kula',battalion:'Upcountry',island:'Maui',companies:[{c:'Engine',min:4},{c:'Tanker',min:3}]},
- {id:'s6',name:'Kīhei',battalion:'South',island:'Maui',companies:[{c:'Engine',min:4},{c:'BC Aid',min:1}]},
- {id:'s7',name:'Wailea–Mākena',battalion:'South',island:'Maui',companies:[{c:'Engine',min:4},{c:'Tanker',min:3}]},
- {id:'s8',name:'Lahaina',battalion:'West',island:'Maui',companies:[{c:'Engine',min:4},{c:'BC Aid',min:1}]},
- {id:'s9',name:'Nāpili',battalion:'West',island:'Maui',companies:[{c:'Engine',min:4}]},
- {id:'s10',name:'Hāna',battalion:'Hāna',island:'Maui',companies:[{c:'Engine',min:3},{c:'Tanker',min:3},{c:'BC Aid',min:1}]},
- {id:'s11',name:'Lānaʻi',battalion:'Lānaʻi/Molokaʻi',island:'Lānaʻi',companies:[{c:'Engine',min:3},{c:'Tanker',min:3}]},
- {id:'s12',name:'Molokaʻi (Hoʻolehua)',battalion:'Lānaʻi/Molokaʻi',island:'Molokaʻi',companies:[{c:'Engine',min:3},{c:'Tanker',min:3},{c:'BC Aid',min:1}]},
- {id:'s13',name:'Pukalani',battalion:'Upcountry',island:'Maui',companies:[{c:'Engine',min:4}]},
- {id:'s14',name:'Olowalu',battalion:'West',island:'Maui',companies:[{c:'Engine',min:3}]},
+ {id:'s1',name:'Wailuku',island:'Maui',remote:false,bn:'Bn 1',companies:[{c:'Engine',min:5},{c:'Mini',min:2}]},
+ {id:'s2',name:'Pāʻia',island:'Maui',remote:false,bn:'Bn 1',companies:[{c:'Engine',min:5}]},
+ {id:'s3',name:'Lahaina',island:'Maui',remote:false,bn:'Bn 2',companies:[{c:'Engine',min:5},{c:'Ladder',min:5},{c:'Tanker',min:1}]},
+ {id:'s4',name:'Kaunakakai',island:'Molokaʻi',remote:true,bn:'Bn 2',companies:[{c:'Engine',min:5},{c:'Tanker',min:1}]},
+ {id:'s5',name:'Makawao',island:'Maui',remote:false,bn:'Bn 1',companies:[{c:'Engine',min:5}]},
+ {id:'s6',name:'Kīhei',island:'Maui',remote:false,bn:'Bn 1',companies:[{c:'Engine',min:5}]},
+ {id:'s7',name:'Hāna',island:'Maui',remote:true,bn:'Bn 1',companies:[{c:'Engine',min:3},{c:'Tanker',min:1}]},
+ {id:'s8',name:'Lānaʻi',island:'Lānaʻi',remote:true,bn:'Bn 2',companies:[{c:'Engine',min:3},{c:'Tanker',min:1}]},
+ {id:'s9',name:'Hoʻolehua',island:'Molokaʻi',remote:true,bn:'Bn 2',companies:[{c:'Engine',min:3}]},
+ {id:'s10',name:'Kahului',island:'Maui',remote:false,bn:'Bn 1',companies:[{c:'Engine',min:5},{c:'Tanker',min:1},{c:'Hazmat',min:5},{c:'Rescue',min:5}]},
+ {id:'s11',name:'Nāpili',island:'Maui',remote:false,bn:'Bn 2',companies:[{c:'Engine',min:5}]},
+ {id:'s12',name:'Pukoʻo',island:'Molokaʻi',remote:true,bn:'Bn 2',companies:[{c:'Engine',min:3}]},
+ {id:'s13',name:'Kula',island:'Maui',remote:false,bn:'Bn 1',companies:[{c:'Engine',min:5},{c:'Tanker',min:1}]},
+ {id:'s14',name:'Wailea',island:'Maui',remote:false,bn:'Bn 1',companies:[{c:'Engine',min:5},{c:'Ladder',min:5},{c:'Tanker',min:1}]},
 ];
 const stById=id=>STATIONS.find(s=>s.id===id);
-const stByName=n=>STATIONS.find(s=>s.name===n);
-const RANKS=[['FF II',.46],['FF III',.33],['Captain',.18],['BC',.03]];
+const RANKS=[['FF I',.30],['FF II',.24],['FF III',.25],['Captain',.18],['BC',.03]];
 function pick(rng,weighted){let r=rng();for(const[v,w]of weighted){if((r-=w)<0)return v;}return weighted[0][0];}
 function sampleHours(rng){const r=rng();let h;if(r<.16)h=rng()*64;else if(r<.78)h=84+rng()*132;else h=216+rng()*72;return Math.min(FY_CAP,Math.round(h/12)*12);}
 
@@ -279,23 +280,22 @@ function buildMembers(){
     const platoon=['R','G','B'][n%3];
     const rank=pick(rng,RANKS);
     const qual=new Set(['Engine']);
-    st.companies.forEach(c=>{if(c.c!=='BC Aid'&&rng()<.7)qual.add(c.c);});
-    if(rng()<.25)qual.add(CLASSES[2+Math.floor(rng()*4)]); // occasional cross-qual into a specialty
-    if(rank==='BC')qual.add('BC Aid');
-    const ql=[...qual].filter(c=>c!=='BC Aid'||rank==='BC'||rng()<.15);
+    st.companies.forEach(c=>{if(c.c!=='Engine'&&rng()<.55)qual.add(c.c);});
+    if(rng()<.2)qual.add(CLASSES[Math.floor(rng()*CLASSES.length)]); // occasional cross-qual
+    const ql=[...qual];
     members['FF-'+id]={id:'FF-'+id,rank,homeStationId:stationId,platoon,
       qualifiedClasses:ql.length?ql:['Engine'],
       fyHours:sampleHours(rng), holdBackHours:rng()<.28?Math.round(rng()*6)*12:0,
       dayOfPrefs:ql.filter(()=>rng()<.7), suspendedUntil: rng()<.04?'2026-07-15':null};
     id++;
   }
-  // ---- hero candidates: guarantee a clean equity story for the June 19 Engine 6 (Kīhei) sick call ----
+  // ---- hero candidates: a clean rank-for-rank equity story for the June 19 Engine 6 (Kīhei) FF I sick call ----
   const hero=[
-    {id:'FF-1042',rank:'FF III',homeStationId:'s8',platoon:'B',qualifiedClasses:['Engine','Ladder'],fyHours:24,holdBackHours:48,dayOfPrefs:['Engine','Ladder'],suspendedUntil:null}, // Lahaina/West – lowest hrs, county-wide reach, lots of hold-back
-    {id:'FF-1108',rank:'FF II',homeStationId:'s7',platoon:'B',qualifiedClasses:['Engine','Tanker'],fyHours:60,holdBackHours:12,dayOfPrefs:['Engine'],suspendedUntil:null}, // Wailea–Mākena/South – same battalion
-    {id:'FF-1190',rank:'Captain',homeStationId:'s6',platoon:'B',qualifiedClasses:['Engine'],fyHours:180,holdBackHours:0,dayOfPrefs:['Engine'],suspendedUntil:null}, // Kīhei/South – SAME STATION but near cap → ranked low (equity beats proximity)
-    {id:'FF-1067',rank:'FF II',homeStationId:'s2',platoon:'B',qualifiedClasses:['Engine','Ladder','Hazmat'],fyHours:96,dayOfPrefs:['Engine'],holdBackHours:0,suspendedUntil:null},
-    {id:'FF-1153',rank:'FF III',homeStationId:'s1',platoon:'B',qualifiedClasses:['Engine','Rescue'],fyHours:132,dayOfPrefs:['Engine'],holdBackHours:0,suspendedUntil:null},
+    {id:'FF-1042',rank:'FF I',homeStationId:'s11',platoon:'B',qualifiedClasses:['Engine'],fyHours:24,holdBackHours:48,dayOfPrefs:['Engine'],suspendedUntil:null}, // Nāpili – lowest hrs, lots of hold-back
+    {id:'FF-1108',rank:'FF I',homeStationId:'s14',platoon:'B',qualifiedClasses:['Engine','Tanker'],fyHours:48,holdBackHours:12,dayOfPrefs:['Engine'],suspendedUntil:null}, // Wailea – same island
+    {id:'FF-1153',rank:'FF I',homeStationId:'s4',platoon:'B',qualifiedClasses:['Engine'],fyHours:72,holdBackHours:24,dayOfPrefs:['Engine'],suspendedUntil:null}, // Kaunakakai/Molokaʻi – county-wide (off-island) reach
+    {id:'FF-1190',rank:'FF I',homeStationId:'s6',platoon:'B',qualifiedClasses:['Engine'],fyHours:168,holdBackHours:0,dayOfPrefs:['Engine'],suspendedUntil:null}, // Kīhei – SAME STATION but near cap → ranked low (equity beats proximity)
+    {id:'FF-1067',rank:'FF I',homeStationId:'s10',platoon:'B',qualifiedClasses:['Engine','Ladder','Hazmat'],fyHours:96,dayOfPrefs:['Engine'],holdBackHours:0,suspendedUntil:null}, // Kahului
   ];
   hero.forEach(h=>members[h.id]=h);
   return members;
@@ -305,21 +305,21 @@ function buildSeed(){
   const members=buildMembers();
   // hero vacancy: Kīhei Engine, sick call for the June 19 (1st platoon) shift — station can't backfill
   const vacancies=[
-    {id:'v-hero',stationId:'s6',cls:'Engine',date:DEMO_DATE,segment:'full24',hours:24,type:'unscheduled',
-     status:'open',reason:'Sick call — FF II',shortBy:1,wouldHoldBack:true,assigneeId:null,bids:[]},
-    // a couple more open same-day needs for the command center
-    {id:'v2',stationId:'s4',cls:'Tanker',date:DEMO_DATE,segment:'full24',hours:24,type:'unscheduled',status:'open',reason:'Industrial leave',shortBy:1,wouldHoldBack:false,assigneeId:null,bids:[]},
+    {id:'v-hero',stationId:'s6',cls:'Engine',rank:'FF I',date:DEMO_DATE,segment:'full24',hours:24,type:'unscheduled',
+     status:'open',reason:'SL',shortBy:1,wouldHoldBack:true,assigneeId:null,bids:[]},
+    // another open same-day need for the command center
+    {id:'v2',stationId:'s5',cls:'Engine',rank:'FF III',date:DEMO_DATE,segment:'full24',hours:24,type:'unscheduled',status:'open',reason:'SA',shortBy:1,wouldHoldBack:false,assigneeId:null,bids:[]},
     // scheduled (advance / bid) openings — late June
-    {id:'v3',stationId:'s2',cls:'Engine',date:'2026-06-18',segment:'full24',hours:24,type:'scheduled',status:'open',reason:'Approved vacation',shortBy:1,assigneeId:null,bids:['FF-1067']},
-    {id:'v4',stationId:'s1',cls:'Ladder',date:'2026-06-18',segment:'0730-1930',hours:12,type:'scheduled',status:'open',reason:'Training',shortBy:1,assigneeId:null,bids:[]},
-    {id:'v5',stationId:'s8',cls:'Engine',date:'2026-06-23',segment:'full24',hours:24,type:'scheduled',status:'open',reason:'Approved vacation',shortBy:1,assigneeId:null,bids:[]},
-    {id:'v6',stationId:'s5',cls:'Tanker',date:'2026-06-20',segment:'full24',hours:24,type:'scheduled',status:'open',reason:'FMLA',shortBy:1,assigneeId:null,bids:[]},
+    {id:'v3',stationId:'s10',cls:'Engine',rank:'FF I',date:'2026-06-18',segment:'full24',hours:24,type:'scheduled',status:'open',reason:'VAC',shortBy:1,assigneeId:null,bids:['FF-1067']},
+    {id:'v4',stationId:'s3',cls:'Ladder',rank:'Captain',date:'2026-06-18',segment:'0730-1930',hours:12,type:'scheduled',status:'open',reason:'SA',shortBy:1,assigneeId:null,bids:[]},
+    {id:'v5',stationId:'s11',cls:'Engine',rank:'FF III',date:'2026-06-23',segment:'full24',hours:24,type:'scheduled',status:'open',reason:'VAC',shortBy:1,assigneeId:null,bids:[]},
+    {id:'v6',stationId:'s13',cls:'Tanker',rank:'FF III',date:'2026-06-20',segment:'full24',hours:24,type:'scheduled',status:'open',reason:'FL',shortBy:1,assigneeId:null,bids:[]},
   ];
   return {members,vacancies};
 }
 
 /* ============================================================ 3. STATE STORE */
-const LS='mfd-ot-recall-v1';
+const LS='mfd-ot-recall-v2';
 let state;
 function freshState(){const seed=buildSeed();return{role:'bc',theme:'light',demoDate:DEMO_DATE,view:null,
   members:seed.members,vacancies:seed.vacancies,availability:{},notifications:[],modal:null};}
@@ -329,23 +329,25 @@ function resetDemo(){state=freshState();save();render();toast('ok','Demo reset',
 
 /* ============================================================ 4. EQUITY ENGINE */
 function remaining(m){return FY_CAP-m.fyHours;}
+function coMin(v){const c=stById(v.stationId).companies.find(x=>x.c===v.cls);return c?c.min:0;}
+function ratioStr(v){const m=coMin(v);return `${m-(v.shortBy||0)}/${m}`;}
 function checks(m,vac){
-  const sameClass=m.qualifiedClasses.includes(vac.cls);
+  const sameRank=m.rank===vac.rank;                            // rank-for-rank
+  const sameClass=m.qualifiedClasses.includes(vac.cls);        // similar function
   const off=!isOnDuty(m,vac.date);
   const window=inFourDayOff(m,vac.date);
   const straight=!adjacentOnDuty(m,vac.date);
   const cap=remaining(m)>=MIN_BLOCK || remaining(m)>0; // remaining-balance rule: any balance <12 still allowed to finish
   const notSusp=!(m.suspendedUntil && m.suspendedUntil>=vac.date);
   const notBusy=!state.vacancies.some(v=>v.id!==vac.id&&v.assigneeId===m.id&&v.date===vac.date);
-  return {sameClass,off,window,straight,cap,notSusp,notBusy};
+  return {sameRank,sameClass,off,window,straight,cap,notSusp,notBusy};
 }
-function eligible(m,vac){const c=checks(m,vac);return c.sameClass&&c.off&&c.window&&c.straight&&c.cap&&c.notSusp&&c.notBusy;}
+function eligible(m,vac){const c=checks(m,vac);return c.sameRank&&c.sameClass&&c.off&&c.window&&c.straight&&c.cap&&c.notSusp&&c.notBusy;}
 function tier(m,vac){const st=stById(vac.stationId),ms=stById(m.homeStationId);
-  if(m.homeStationId===vac.stationId)return 1;                 // same station (≈ same truck/station)
-  if(ms.battalion===st.battalion)return 2;                     // same battalion
-  if(ms.island===st.island)return 3;                           // same island
-  return 4;}                                                   // county-wide
-const TIERLBL={1:'Same station',2:'Same battalion',3:'Same island',4:'County-wide'};
+  if(m.homeStationId===vac.stationId)return 1;                 // same station
+  if(ms.island===st.island)return 2;                           // same island
+  return 3;}                                                   // county-wide (off-island)
+const TIERLBL={1:'Same station',2:'Same island',3:'County-wide'};
 function rankCandidates(vac){
   const list=Object.values(state.members).filter(m=>eligible(m,vac));
   list.sort((a,b)=> a.fyHours-b.fyHours || tier(a,vac)-tier(b,vac) || b.holdBackHours-a.holdBackHours || a.id.localeCompare(b.id));
@@ -402,16 +404,16 @@ function viewCmd(){
   <div class="card"><div class="hd"><h3>Vacancies needing a fill — today</h3><span class="spacer"></span><span class="pill warn">Unscheduled · 30-min window</span></div>
   <div class="bd tight">${today.length?`<table><thead><tr><th>Station</th><th>Apparatus</th><th>Shift</th><th>Reason</th><th>Status</th><th></th></tr></thead><tbody>
     ${today.map(v=>{const st=stById(v.stationId);return `<tr>
-      <td><b>${st.name}</b><div style="font-size:11.5px;color:var(--muted)">${st.battalion} · ${st.island}</div></td>
-      <td>${classDot(v.cls)} ${v.cls}</td><td class="mono">${segLabel(v.segment)} <span style="color:var(--muted)">(${v.hours}h)</span></td>
-      <td>${v.reason}</td>
-      <td>${v.wouldHoldBack?'<span class="pill crit">Hold-back risk</span>':'<span class="pill warn">Short '+v.shortBy+'</span>'}</td>
+      <td><b>${st.name}</b><div style="font-size:11.5px;color:var(--muted)">${st.island}${st.remote?' · Remote 72':''}</div></td>
+      <td><b>${v.rank}</b> · ${v.cls}</td><td class="mono">${segLabel(v.segment)} <span style="color:var(--muted)">(${v.hours}h)</span></td>
+      <td>${reasonLbl(v.reason)}</td>
+      <td>${v.wouldHoldBack?'<span class="pill crit">Hold-back risk</span>':'<span class="pill warn">'+ratioStr(v)+' · short '+v.shortBy+'</span>'}</td>
       <td style="text-align:right"><button class="btn primary sm" data-act="fill" data-id="${v.id}">Fill fairly →</button></td></tr>`;}).join('')}
     </tbody></table>`:`<div class="bd"><span class="pill ok">All companies at staffing</span></div>`}</div></div>
   <div style="height:16px"></div>
   <div class="card"><div class="hd"><h3>Upcoming scheduled openings</h3><span class="spacer"></span><span class="pill accent">Advance · 48-hr bid</span></div>
   <div class="bd tight"><table><thead><tr><th>Date</th><th>Station</th><th>Apparatus</th><th>Shift</th><th>Bids</th><th></th></tr></thead><tbody>
-   ${sched.map(v=>{const st=stById(v.stationId);return `<tr><td class="mono">${fmtShort(v.date)}</td><td><b>${st.name}</b></td><td>${classDot(v.cls)} ${v.cls}</td><td class="mono">${segLabel(v.segment)}</td>
+   ${sched.map(v=>{const st=stById(v.stationId);return `<tr><td class="mono">${fmtShort(v.date)}</td><td><b>${st.name}</b></td><td><b>${v.rank}</b> · ${v.cls}</td><td class="mono">${segLabel(v.segment)}</td>
      <td>${v.bids.length?`<span class="pill accent">${v.bids.length} bid${v.bids.length>1?'s':''}</span>`:'<span class="pill muted">none yet</span>'}</td>
      <td style="text-align:right"><button class="btn sm" data-act="fill" data-id="${v.id}">Review & assign</button></td></tr>`;}).join('')}
   </tbody></table></div></div>`;
@@ -432,7 +434,8 @@ function fillModal(vacId){
       <div class="who"><b>${m.id}</b><div style="font-size:11.5px;color:var(--muted)">${m.rank} · ${stById(m.homeStationId).name}</div></div>
       <div class="why">
         <span class="tierbadge ${t<=2?'t'+t:''}">${TIERLBL[t]}</span>
-        <span class="chip good">✓ ${v.cls}-qualified</span>
+        <span class="chip good">✓ ${v.rank}</span>
+        <span class="chip good">✓ ${v.cls}-qual</span>
         <span class="chip good">✓ 4-day off</span>
         <span class="chip good">✓ 34-hr OK</span>
         ${bid?'<span class="chip">🖐 bid</span>':''}
@@ -442,17 +445,17 @@ function fillModal(vacId){
         <div style="font-size:11px;color:var(--muted)">${remaining(m)}h remaining</div></div>
       <button class="btn primary sm" data-act="assign" data-vac="${v.id}" data-m="${m.id}">Assign</button>
     </div>`;}).join('');
-  return modalShell(`Fill vacancy — ${st.name} ${v.cls}`,`
+  return modalShell(`Fill vacancy — ${st.name} ${v.rank} · ${v.cls}`,`
     <div class="kv" style="margin-bottom:14px">
-      <dt>Station</dt><dd>${st.name} · ${st.battalion} · ${st.island}</dd>
-      <dt>Apparatus</dt><dd>${v.cls} (min staffing ${st.companies.find(c=>c.c===v.cls).min})</dd>
+      <dt>Station</dt><dd>${st.name} · ${st.island}${st.remote?' · Remote 72':''}</dd>
+      <dt>Position</dt><dd>${v.rank} · ${v.cls} — staffing ${ratioStr(v)} (min ${coMin(v)})</dd>
       <dt>Shift</dt><dd>${fmt(v.date)} · ${segLabel(v.segment)} · ${v.hours}h</dd>
-      <dt>Reason</dt><dd>${v.reason} (${v.type})</dd>
+      <dt>Reason</dt><dd>${reasonLbl(v.reason)} · ${v.type}</dd>
     </div>
     ${v.wouldHoldBack?`<div class="note" style="border-color:var(--crit);color:var(--crit);background:var(--crit-bg);margin-bottom:14px">
       <b>Today's manual outcome:</b> no one at ${st.name} can backfill → an off-going member gets <b>held back</b> to hold minimum staffing. Those hours don't even count toward their recall total.</div>`:''}
     <h4 style="margin:0 0 4px">Eligible counterparts — ranked by fewest recall hours (equity-first)</h4>
-    <p style="margin:0 0 14px;color:var(--muted);font-size:13px">${cands.length} eligible county-wide. Similar-function (${v.cls}↔${v.cls}), within 4-day off, under the 34-hr cap. Lowest-hours member is offered first.</p>
+    <p style="margin:0 0 14px;color:var(--muted);font-size:13px">${cands.length} eligible county-wide. Rank-for-rank (${v.rank}↔${v.rank}) + similar-function (${v.cls}↔${v.cls}), within 4-day off, under the 34-hr cap. Lowest-hours member is offered first.</p>
     ${rows||'<div class="note">No eligible counterparts found.</div>'}
   `,`<button class="btn" data-act="closemodal">Close</button>`);
 }
@@ -516,7 +519,7 @@ function viewCreate(){
   return `<div class="page-head"><div><h2>Create Opportunity</h2><p>Open a scheduled (advance) vacancy and notify eligible counterparts</p></div></div>
   <div class="card" style="max-width:560px"><div class="bd">
     <div class="grid" style="gap:14px">
-      <div class="field"><label for="cStation">Station</label><select id="cStation">${STATIONS.map(s=>`<option value="${s.id}">${s.name} (${s.battalion})</option>`).join('')}</select></div>
+      <div class="field"><label for="cStation">Station</label><select id="cStation">${STATIONS.map(s=>`<option value="${s.id}">${s.name} (${s.island}${s.remote?', Remote 72':''})</option>`).join('')}</select></div>
       <div class="field"><label for="cClass">Apparatus</label><select id="cClass">${CLASSES.map(c=>`<option>${c}</option>`).join('')}</select></div>
       <div class="field"><label for="cDate">Shift date</label><input type="date" id="cDate" value="${addDays(state.demoDate,3)}"></div>
       <div class="field"><label for="cSeg">Coverage</label><select id="cSeg"><option value="full24">24-hour (0730–0730)</option><option value="0730-1930">Day (0730–1930, 12h)</option><option value="1930-0730">Night (1930–0730, 12h)</option></select></div>
@@ -633,7 +636,7 @@ function viewProfile(){
   <div class="grid cols-2">
    <div class="card"><div class="hd"><h3>Contact (for confirmations)</h3></div><div class="bd"><dl class="kv">
      <dt>Member ID</dt><dd class="mono">${m.id}</dd><dt>Rank</dt><dd>${m.rank}</dd>
-     <dt>Home station</dt><dd>${stById(m.homeStationId).name} · ${stById(m.homeStationId).battalion}</dd>
+     <dt>Home station</dt><dd>${stById(m.homeStationId).name} · ${stById(m.homeStationId).island}${stById(m.homeStationId).remote?' · Remote 72':''}</dd>
      <dt>Platoon</dt><dd><span class="ptag ${m.platoon}">${m.platoon}</span> ${PLATOON[m.platoon].name}</dd>
      <dt>Mobile</dt><dd class="mono">808-555-${m.id.slice(-4)}</dd><dt>Email</dt><dd class="mono">${m.id.toLowerCase()}@mfd.demo</dd>
    </dl><p class="note" style="margin-top:14px">Recall confirmations are sent here by text + email (simulated in this demo).</p></div></div>
@@ -671,7 +674,7 @@ function payoffModal(d){
        <li>They miss their time off; the hours don't count toward recall.</li>
        <li>Overtime stays concentrated on whoever's nearby.</li></ul></div>
      <div class="after"><h4>✓ With the system</h4><ul>
-       <li><b>${m.id}</b> (${stById(m.homeStationId).name}, ${stById(m.homeStationId).battalion}) was offered first — they had the <b>fewest recall hours (${m.fyHours-v.hours}h)</b>.</li>
+       <li><b>${m.id}</b> (${stById(m.homeStationId).name}, ${stById(m.homeStationId).island}) was offered first — they had the <b>fewest recall hours (${m.fyHours-v.hours}h)</b>.</li>
        <li>Found county-wide in seconds via similar-function matching.</li>
        <li>Minimum staffing restored; <b>nobody gets stuck</b>.</li>
        <li>Overtime levels toward the ${FY_CAP}h guarantee for everyone.</li></ul></div>
@@ -697,8 +700,8 @@ function createVac(){const stationId=$('#cStation').value,cls=$('#cClass').value
 function downloadCSV(name,rows){const csv=rows.map(r=>r.map(x=>`"${String(x).replace(/"/g,'""')}"`).join(',')).join('\n');
   const b=new Blob([csv],{type:'text/csv'});const u=URL.createObjectURL(b);const a=document.createElement('a');a.href=u;a.download=name;a.click();URL.revokeObjectURL(u);
   toast('ok','Exported',name);}
-function csvHours(){const rows=[['Member','Rank','Station','Battalion','Platoon','RecallHours','HoldBackHours','RemainingOfCap']];
-  Object.values(state.members).sort((a,b)=>a.fyHours-b.fyHours).forEach(m=>rows.push([m.id,m.rank,stById(m.homeStationId).name,stById(m.homeStationId).battalion,m.platoon,m.fyHours,m.holdBackHours||0,remaining(m)]));
+function csvHours(){const rows=[['Member','Rank','Station','Island','Platoon','RecallHours','HoldBackHours','RemainingOfCap']];
+  Object.values(state.members).sort((a,b)=>a.fyHours-b.fyHours).forEach(m=>rows.push([m.id,m.rank,stById(m.homeStationId).name,stById(m.homeStationId).island,m.platoon,m.fyHours,m.holdBackHours||0,remaining(m)]));
   downloadCSV('recall-hours.csv',rows);}
 function csvAssign(){const rows=[['Member','Station','Apparatus','Date','Hours','Type','Reason']];
   state.vacancies.filter(v=>v.assigneeId).forEach(v=>rows.push([v.assigneeId,stById(v.stationId).name,v.cls,v.date,v.hours,v.type,v.reason]));
