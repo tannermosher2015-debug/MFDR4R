@@ -14,7 +14,7 @@
   --font-mono:'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
   --bg:#e9edf2; --surface:#ffffff; --surface-2:#f4f7fb; --surface-3:#eef2f7;
   --border:#d4dce6; --border-strong:#b9c5d3;
-  --text:#15202d; --muted:#566372; --faint:#7a8794;
+  --text:#15202d; --muted:#566372; --faint:#606b78;
   --accent:#1d4ed8; --accent-text:#ffffff; --accent-weak:#e6edfb;
   --ok:#117a3d; --ok-bg:#e3f4e9; --warn:#8a5a00; --warn-bg:#fbf0d9; --crit:#b42318; --crit-bg:#fbe7e4;
   --p1:#c4361f; --p2:#1f4fc4; --p3:#1f7a3d; /* 1st red, 2nd blue, 3rd green */
@@ -396,7 +396,7 @@ function viewCmd(){
   const filledToday=state.vacancies.filter(v=>v.assigneeId&&v.date===state.demoDate).length;
   return `<div class="page-head"><div><h2>Command Center</h2><p>${fmt(state.demoDate)} · ${onDutyPlatoon(state.demoDate)===null?'':PLATOON[onDutyPlatoon(state.demoDate)].name} on duty</p></div></div>
   <div class="grid cols-4" style="margin-bottom:18px">
-    ${statCard('Open today',today.length,today.some(v=>v.wouldHoldBack)?'⚠ '+today.filter(v=>v.wouldHoldBack).length+' would force a hold-back':'needs filling','crit')}
+    ${statCard('Open today',today.length,today.some(v=>v.wouldHoldBack)?'⚠ '+today.filter(v=>v.wouldHoldBack).length+' would force a hold-back':(today.length?'needs filling':'all companies staffed'),today.length?(today.some(v=>v.wouldHoldBack)?'crit':'warn'):'ok')}
     ${statCard('Filled today',filledToday,'via recall','ok')}
     ${statCard('Upcoming (bid)',sched.length,'scheduled openings','')}
     ${statCard('Members under 50%',Object.values(state.members).filter(m=>m.fyHours<FY_CAP*.5).length,'priority for equity','')}
@@ -419,7 +419,6 @@ function viewCmd(){
   </tbody></table></div></div>`;
 }
 function statCard(k,v,sub,tone){return `<div class="card stat"><div class="k">${k}</div><div class="v" ${tone?`style="color:var(--${tone})"`:''}>${v}</div><div class="sub">${sub}</div></div>`;}
-function classDot(c){return `<span class="dot" style="background:var(--accent);width:7px;height:7px;vertical-align:middle"></span>`;}
 function segLabel(s){return s==='full24'?'24-hour (0730–0730)':s;}
 
 /* ---------- BC: Fill flow (the hero) ---------- */
@@ -519,11 +518,12 @@ function viewCreate(){
   return `<div class="page-head"><div><h2>Create Opportunity</h2><p>Open a scheduled (advance) vacancy and notify eligible counterparts</p></div></div>
   <div class="card" style="max-width:560px"><div class="bd">
     <div class="grid" style="gap:14px">
-      <div class="field"><label for="cStation">Station</label><select id="cStation">${STATIONS.map(s=>`<option value="${s.id}">${s.name} (${s.island}${s.remote?', Remote 72':''})</option>`).join('')}</select></div>
-      <div class="field"><label for="cClass">Apparatus</label><select id="cClass">${CLASSES.map(c=>`<option>${c}</option>`).join('')}</select></div>
+      <div class="field"><label for="cStation">Station</label><select id="cStation" onchange="updateClassOpts()">${STATIONS.map(s=>`<option value="${s.id}">${s.name} (${s.island}${s.remote?', Remote 72':''})</option>`).join('')}</select></div>
+      <div class="field"><label for="cClass">Apparatus</label><select id="cClass">${STATIONS[0].companies.map(c=>`<option>${c.c}</option>`).join('')}</select></div>
+      <div class="field"><label for="cRank">Rank (rank-for-rank)</label><select id="cRank"><option>FF I</option><option>FF II</option><option>FF III</option><option>Captain</option><option>BC</option></select></div>
       <div class="field"><label for="cDate">Shift date</label><input type="date" id="cDate" value="${addDays(state.demoDate,3)}"></div>
       <div class="field"><label for="cSeg">Coverage</label><select id="cSeg"><option value="full24">24-hour (0730–0730)</option><option value="0730-1930">Day (0730–1930, 12h)</option><option value="1930-0730">Night (1930–0730, 12h)</option></select></div>
-      <div class="field"><label for="cReason">Reason</label><select id="cReason"><option>Approved vacation</option><option>Training</option><option>FMLA</option><option>Comp time off</option><option>Industrial leave</option></select></div>
+      <div class="field"><label for="cReason">Reason</label><select id="cReason"><option value="VAC">Vacation [VAC]</option><option value="SA">Special Assignment [SA]</option><option value="FL">Funeral Leave [FL]</option><option value="SL">Sick Leave [SL]</option><option value="SUBO">Substitution [SUBO]</option></select></div>
       <button class="btn primary" data-act="createvac">Open opportunity & notify</button>
     </div>
   </div></div>`;
@@ -691,11 +691,11 @@ function suspend(mId){const m=state.members[mId];m.suspendedUntil=(m.suspendedUn
   save();render();toast('warn','Roster updated',`${m.id} ${m.suspendedUntil?'suspended from program':'reinstated'}.`);}
 function togglePref(c){const m=curMember();const a=m.dayOfPrefs||(m.dayOfPrefs=[]);const i=a.indexOf(c);
   if(i<0)a.push(c);else a.splice(i,1);save();render();}
-function createVac(){const stationId=$('#cStation').value,cls=$('#cClass').value,date=$('#cDate').value,segment=$('#cSeg').value,reason=$('#cReason').value;
+function createVac(){const stationId=$('#cStation').value,cls=$('#cClass').value,rank=$('#cRank').value,date=$('#cDate').value,segment=$('#cSeg').value,reason=$('#cReason').value;
   if(!date){toast('warn','Pick a date');return;}
   const hours=segment==='full24'?24:12;const id='vc'+Date.now();
-  state.vacancies.push({id,stationId,cls,date,segment,hours,type:'scheduled',status:'open',reason,shortBy:1,assigneeId:null,bids:[]});
-  notify(`Opportunity opened: ${stById(stationId).name} ${cls} on ${fmtShort(date)} — eligible counterparts notified.`);
+  state.vacancies.push({id,stationId,cls,rank,date,segment,hours,type:'scheduled',status:'open',reason,shortBy:1,assigneeId:null,bids:[]});
+  notify(`Opportunity opened: ${stById(stationId).name} ${rank} · ${cls} on ${fmtShort(date)} — eligible counterparts notified.`);
   save();state.view='cmd';render();toast('ok','Opportunity opened','Eligible counterparts notified (simulated).');}
 function downloadCSV(name,rows){const csv=rows.map(r=>r.map(x=>`"${String(x).replace(/"/g,'""')}"`).join(',')).join('\n');
   const b=new Blob([csv],{type:'text/csv'});const u=URL.createObjectURL(b);const a=document.createElement('a');a.href=u;a.download=name;a.click();URL.revokeObjectURL(u);
@@ -709,6 +709,7 @@ function csvAssign(){const rows=[['Member','Station','Apparatus','Date','Hours',
   downloadCSV('assignments.csv',rows);}
 
 window.filterRoster=function(q){q=q.toLowerCase();document.querySelectorAll('#rosterBody tr').forEach(tr=>{tr.style.display=tr.dataset.q.includes(q)?'':'none';});};
+window.updateClassOpts=function(){const s=stById(document.querySelector('#cStation').value);document.querySelector('#cClass').innerHTML=s.companies.map(c=>`<option>${c.c}</option>`).join('');};
 
 /* ---------- modal plumbing ---------- */
 function modalShell(title,body,footer){return `<div class="scrim" data-act="scrim"><div class="modal" role="dialog" aria-modal="true" aria-label="${title}">
