@@ -320,6 +320,7 @@ const STATIONS=[
 ];
 const stById=id=>STATIONS.find(s=>s.id===id);
 const RANKS=[['FF I',.30],['FF II',.24],['FF III',.25],['Captain',.18],['BC',.03]];
+const RANKLIST=['FF I','FF II','FF III','Captain','BC'];
 function pick(rng,weighted){let r=rng();for(const[v,w]of weighted){if((r-=w)<0)return v;}return weighted[0][0];}
 function sampleHours(rng){const r=rng();let h;if(r<.16)h=rng()*64;else if(r<.78)h=84+rng()*132;else h=216+rng()*72;return Math.min(FY_CAP,Math.round(h/12)*12);}
 
@@ -372,10 +373,17 @@ function buildSeed(){
 }
 
 /* ============================================================ 3. STATE STORE */
-const LS='mfd-ot-recall-v3';
+const LS='mfd-ot-recall-v4';
 let state;
+function seedLog(){return [
+  {t:'07:42',type:'assign',by:'BC 1',memberId:'FF-1067',station:'Kahului',rank:'FF I',cls:'Engine',note:'Accepted advance bid (VAC) — recommended #1'},
+  {t:'07:33',type:'accept',by:'BC 1',memberId:'FF-1067',station:'Kahului',rank:'FF I',cls:'Engine',note:'Accepted recall'},
+  {t:'07:31',type:'decline',by:'BC 2',memberId:'FF-1108',station:'Wailea',rank:'FF I',cls:'Engine',note:'Declined — already committed'},
+  {t:'07:25',type:'offer',by:'BC 2',memberId:'FF-1108',station:'Wailea',rank:'FF I',cls:'Engine',note:'Lowest-hours eligible (county-wide)'},
+];}
 function freshState(){const seed=buildSeed();return{role:'bc1',theme:'light',demoDate:DEMO_DATE,view:null,
-  members:seed.members,vacancies:seed.vacancies,availability:{},notifications:[],introDismissed:false,modal:null};}
+  members:seed.members,vacancies:seed.vacancies,availability:{},notifications:[],introDismissed:false,
+  otRate:55,log:seedLog(),modal:null};}
 function load(){try{const r=localStorage.getItem(LS);if(r){state=JSON.parse(r);state.modal=null;return;}}catch(e){}state=freshState();}
 function save(){try{const{modal,...rest}=state;localStorage.setItem(LS,JSON.stringify(rest));}catch(e){}}
 function resetDemo(){state=freshState();save();render();toast('ok','Demo reset','Back to the June 19 sick-call scenario.');}
@@ -402,14 +410,15 @@ function tier(m,vac){const st=stById(vac.stationId),ms=stById(m.homeStationId);
   return 3;}                                                   // county-wide (off-island)
 const TIERLBL={1:'Same station',2:'Same island',3:'County-wide'};
 function rankCandidates(vac){
-  const list=Object.values(state.members).filter(m=>eligible(m,vac));
+  const declined=new Set(vac.declined||[]);
+  const list=Object.values(state.members).filter(m=>eligible(m,vac)&&!declined.has(m.id));
   list.sort((a,b)=> a.fyHours-b.fyHours || tier(a,vac)-tier(b,vac) || b.holdBackHours-a.holdBackHours || a.id.localeCompare(b.id));
   return list;
 }
 
 /* ============================================================ 5. RENDER */
 const $=s=>document.querySelector(s); const root=$('#main');
-const NAV={bc:[['cmd','Command Center'],['create','Create Opportunity'],['equity','Equity Dashboard'],['roster','Roster'],['reports','Reports']],
+const NAV={bc:[['cmd','Command Center'],['cost','Cost & Coverage'],['equity','Equity Dashboard'],['audit','Audit Log'],['roster','Roster'],['create','Create Opportunity'],['reports','Reports']],
   ff:[['home','My Recall'],['opps','Opportunities'],['avail','Availability'],['profile','Profile']]};
 function curMember(){return isBC()?null:state.members[state.role];}
 function isBC(){return state.role==='bc1'||state.role==='bc2';}
@@ -432,7 +441,7 @@ function render(){
   // bell
   const n=state.notifications.length;const bc=$('#bellCount');bc.hidden=!n;bc.textContent=n;
   // view
-  const V={cmd:viewCmd,create:viewCreate,equity:viewEquity,roster:viewRoster,reports:viewReports,
+  const V={cmd:viewCmd,cost:viewCost,create:viewCreate,equity:viewEquity,audit:viewAudit,roster:viewRoster,reports:viewReports,
            home:viewHome,opps:viewOpps,avail:viewAvail,profile:viewProfile};
   root.innerHTML=(V[state.view]||(()=>'<p>Not found</p>'))();
   if(state.modal)renderModal();else $('#modalRoot').innerHTML='';
@@ -481,7 +490,7 @@ function viewCmd(){
 function statCard(k,v,sub,tone){return `<div class="card stat"><div class="k">${k}</div><div class="v" ${tone?`style="color:var(--${tone})"`:''}>${v}</div><div class="sub">${sub}</div></div>`;}
 function introCallout(){return `<div class="intro" role="note">
   <div class="ico" aria-hidden="true">i</div>
-  <div class="tx">Each row below is a vacancy on today's shift. A red <b>Hold-back risk</b> flag means a station is short and someone would be stuck holding over to cover it. Click <b>Fill fairly →</b> and the system instantly ranks every eligible counterpart county-wide by who's worked the <b>least</b> overtime — pick one and they're recalled. Fair, fast, nobody stuck.</div>
+  <div class="tx">Each row below is a vacancy on today's shift. A red <b>Hold-back risk</b> flag means a station is short and someone would be stuck holding over to cover it. Click <b>Fill fairly →</b> and the system instantly ranks every eligible counterpart county-wide by who's worked the <b>least</b> overtime. <b>Offer</b> the recommended one — they accept, and they're recalled. Every step is logged (see <b>Audit Log</b>). Fair, fast, nobody stuck.</div>
   <button class="x" data-act="dismissintro" aria-label="Dismiss this tip">✕</button>
 </div>`;}
 function segLabel(s){return s==='full24'?'24-hour (0730–0730)':s;}
@@ -491,23 +500,33 @@ function fillModal(vacId){
   const v=state.vacancies.find(x=>x.id===vacId); const st=stById(v.stationId);
   const cands=rankCandidates(v);
   const bidSet=new Set(v.bids||[]);
+  const offer=v.offer; // {memberId} while an offer is out for response
   const rows=cands.slice(0,8).map((m,i)=>{
     const t=tier(m,v); const bid=bidSet.has(m.id);
+    const pending=offer&&offer.memberId===m.id;
+    const otherPending=offer&&offer.memberId!==m.id;
+    const action = pending
+      ? `<div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end">
+           <span class="pill warn">Offered · awaiting reply</span>
+           <div style="display:flex;gap:6px"><button class="btn primary sm" data-act="acceptoffer" data-vac="${v.id}">Accepted</button><button class="btn sm" data-act="declineoffer" data-vac="${v.id}">Declined</button></div></div>`
+      : otherPending
+        ? `<span style="color:var(--faint);font-size:12px">—</span>`
+        : `<button class="btn primary sm" data-act="offer" data-vac="${v.id}" data-m="${m.id}">Offer recall →</button>`;
     return `<div class="cand ${i===0?'top':''}">
       <div class="rank">${i+1}</div>
       <div class="who"><b>${m.id}</b><div style="font-size:11.5px;color:var(--muted)">${m.rank} · ${stById(m.homeStationId).name}</div></div>
       <div class="why">
+        ${i===0?'<span class="chip" style="background:var(--ok);color:#fff">★ Recommended</span>':''}
         <span class="tierbadge ${t<=2?'t'+t:''}">${TIERLBL[t]}</span>
         <span class="chip good">✓ ${v.rank}</span>
         <span class="chip good">✓ ${v.cls}-qual</span>
-        <span class="chip good">✓ 4-day off</span>
-        <span class="chip good">✓ 34-hr OK</span>
+        <span class="chip good">✓ 4-day off · 34-hr OK</span>
         ${bid?'<span class="chip">🖐 bid</span>':''}
         ${m.holdBackHours?`<span class="chip flag">held back ${m.holdBackHours}h</span>`:''}
       </div>
       <div class="hrs"><div class="big" style="color:var(--${m.fyHours<FY_CAP*.5?'ok':m.fyHours>=FY_CAP*.9?'crit':'text'})">${m.fyHours} / ${FY_CAP}h</div>
         <div style="font-size:11px;color:var(--muted)">${remaining(m)}h remaining</div></div>
-      <button class="btn primary sm" data-act="assign" data-vac="${v.id}" data-m="${m.id}">Assign</button>
+      ${action}
     </div>`;}).join('');
   return modalShell(`Fill vacancy — ${st.name} ${v.rank} · ${v.cls}`,`
     <div class="kv" style="margin-bottom:14px">
@@ -519,7 +538,7 @@ function fillModal(vacId){
     ${v.wouldHoldBack?`<div class="note" style="border-color:var(--crit);color:var(--crit);background:var(--crit-bg);margin-bottom:14px">
       <b>Today's manual outcome:</b> no one at ${st.name} can backfill → an off-going member gets <b>held back</b> to hold minimum staffing. Those hours don't even count toward their recall total.</div>`:''}
     <h4 style="margin:0 0 4px">Eligible counterparts — ranked by fewest recall hours (equity-first)</h4>
-    <p style="margin:0 0 14px;color:var(--muted);font-size:13px">${cands.length} eligible county-wide. Rank-for-rank (${v.rank}↔${v.rank}) + similar-function (${v.cls}↔${v.cls}), within 4-day off, under the 34-hr cap. Lowest-hours member is offered first.</p>
+    <p style="margin:0 0 14px;color:var(--muted);font-size:13px">${cands.length} eligible county-wide. Rank-for-rank (${v.rank}↔${v.rank}) + similar-function (${v.cls}↔${v.cls}), within 4-day off, under the 34-hr cap. <b>Offer the recommended member</b> — they accept or decline (30-min window). Offering anyone below the recommendation is logged as an override.</p>
     ${rows||'<div class="note">No eligible counterparts found.</div>'}
   `,`<button class="btn" data-act="closemodal">Close</button>`);
 }
@@ -608,6 +627,66 @@ function viewReports(){
     <dt>Total recall hours assigned (session)</dt><dd>${state.vacancies.filter(v=>v.assigneeId).reduce((a,v)=>a+v.hours,0)}h</dd>
     <dt>Hold-back hours logged (not counted vs cap)</dt><dd>${Object.values(state.members).reduce((a,m)=>a+(m.holdBackHours||0),0)}h</dd>
   </dl></div></div>`;
+}
+
+/* ---------- BC: Cost & Coverage ---------- */
+function money(n){return '$'+Math.round(n).toLocaleString('en-US');}
+function viewCost(){
+  const ms=Object.values(state.members); const rate=state.otRate||55;
+  const recallHrs=ms.reduce((a,m)=>a+m.fyHours,0);
+  const holdHrs=ms.reduce((a,m)=>a+(m.holdBackHours||0),0);
+  const recallCost=recallHrs*rate, holdCost=holdHrs*rate;
+  const sorted=[...ms].sort((a,b)=>b.fyHours-a.fyHours);
+  const topN=Math.ceil(ms.length*0.1);
+  const topHrs=sorted.slice(0,topN).reduce((a,m)=>a+m.fyHours,0);
+  const conc=recallHrs?Math.round(topHrs/recallHrs*100):0;
+  const openToday=state.vacancies.filter(v=>v.status==='open'&&v.date===state.demoDate);
+  const holdRisk=openToday.filter(v=>v.wouldHoldBack).length;
+  const byRank=RANKLIST.map(r=>{const g=ms.filter(m=>m.rank===r);const h=g.reduce((a,m)=>a+m.fyHours,0);return{r,h,cost:h*rate};});
+  const maxRankCost=Math.max(...byRank.map(b=>b.cost),1);
+  return `<div class="page-head"><div><h2>Cost &amp; Coverage</h2><p>The budget and staffing side of recall — fiscal year to date</p></div>
+   <span class="spacer"></span><label style="display:flex;align-items:center;gap:8px"><span style="font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--faint);font-weight:700">Assumed OT rate $/hr</span><input type="number" id="otRate" value="${rate}" min="0" step="1" style="width:84px" onchange="setRate(this.value)"></label></div>
+  <div class="grid cols-4" style="margin-bottom:18px">
+    ${statCard('Recall OT spend',money(recallCost),`${recallHrs.toLocaleString()} hrs YTD`,'')}
+    ${statCard('Hold-back OT cost',money(holdCost),`${holdHrs.toLocaleString()} forced hrs — the status-quo tax`,'crit')}
+    ${statCard('OT concentration',conc+'%',`carried by the top 10% of earners`,(conc>30?'warn':'ok'))}
+    ${statCard('Short right now',openToday.length,`${holdRisk} would force a hold-back`,(openToday.length?'crit':'ok'))}
+  </div>
+  <div class="split" style="margin-bottom:18px">
+    <div class="before"><h4>✕ Status quo (manual)</h4><ul>
+      <li><b>${money(holdCost)}</b> in hold-back / forced OT this year — people held over because no system filled the gap.</li>
+      <li>OT concentrated: the top 10% carry <b>${conc}%</b> of recall hours (burnout + grievance risk).</li>
+      <li>Fills happen by phone tree — slow, and whoever answers first wins.</li>
+      <li>No record of who was offered, or why.</li></ul></div>
+    <div class="after"><h4>✓ With the system</h4><ul>
+      <li>Hold-backs become <b>planned recalls</b> — the same hours, fairly assigned, not forced.</li>
+      <li>Distribution levels toward the average — no one buried, no one shut out.</li>
+      <li>Eligible counterparts ranked <b>instantly</b>, county-wide.</li>
+      <li>Every offer, accept, decline &amp; assignment <b>logged</b> (see Audit Log).</li></ul></div>
+  </div>
+  <div class="card"><div class="hd"><h3>Recall OT cost by rank</h3></div><div class="bd tight"><table class="resp"><thead><tr><th>Rank</th><th>Recall hours</th><th>Cost (YTD)</th><th></th></tr></thead><tbody>
+    ${byRank.map(b=>`<tr><td data-label="Rank"><b>${b.r}</b></td><td data-label="Recall hours" class="mono">${b.h.toLocaleString()}h</td><td data-label="Cost" class="mono">${money(b.cost)}</td><td data-label="" style="width:42%"><div class="bar"><i style="width:${Math.round(b.cost/maxRankCost*100)}%"></i></div></td></tr>`).join('')}
+  </tbody></table></div></div>
+  <p class="note" style="margin-top:14px">Costs are illustrative — they scale with the assumed OT rate above; drop in MFD's real blended recall rate to size the real numbers. Hours come from this demo's anonymized roster.</p>`;
+}
+
+/* ---------- BC: Audit Log ---------- */
+function viewAudit(){
+  const log=state.log||[];
+  const badge={offer:'accent',accept:'ok',decline:'warn',assign:'ok',override:'crit'};
+  const lbl={offer:'Offered',accept:'Accepted',decline:'Declined',assign:'Assigned',override:'Override'};
+  return `<div class="page-head"><div><h2>Audit Log</h2><p>Every recall action — who was offered, who accepted or declined, who was assigned, by which BC</p></div>
+   <span class="spacer"></span>${log.length?`<button class="btn sm" data-act="csvAudit">↓ Export CSV</button>`:''}</div>
+  <div class="card"><div class="bd tight">${log.length?`<div class="scroll"><table class="resp"><thead><tr><th>Time</th><th>Event</th><th>Member</th><th>Vacancy</th><th>By</th><th>Note</th></tr></thead><tbody>
+    ${log.map(e=>`<tr>
+      <td data-label="Time" class="mono">${e.t}</td>
+      <td data-label="Event"><span class="pill ${badge[e.type]||'muted'}">${lbl[e.type]||e.type}</span></td>
+      <td data-label="Member"><b class="mono">${e.memberId}</b></td>
+      <td data-label="Vacancy">${e.station} · ${e.rank} ${e.cls}</td>
+      <td data-label="By">${e.by}</td>
+      <td data-label="Note" style="color:var(--muted);font-size:12.5px">${e.note||''}</td></tr>`).join('')}
+  </tbody></table></div>`:'<div class="bd"><span class="pill muted">No actions logged yet — make an offer from the Command Center.</span></div>'}</div></div>
+  <p class="note" style="margin-top:14px">This is the system's defensibility layer: in a grievance, every assignment shows the ranked reason it was made and which offers were declined first — and it's the export you bring to the annual program review with the Union.</p>`;
 }
 
 /* ---------- FF: My Recall ---------- */
@@ -718,10 +797,25 @@ function toast(kind,title,msg){const el=document.createElement('div');el.classNa
   $('#toasts').appendChild(el);setTimeout(()=>el.remove(),5200);}
 function notify(text){state.notifications.unshift({text,ts:fmt(state.demoDate)});}
 
+function nowHM(){const d=new Date();return ('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2);}
+function logEvent(type,v,memberId,note){if(!state.log)state.log=[];state.log.unshift({t:nowHM(),type,by:'BC '+bcNum(),memberId,station:stById(v.stationId).name,rank:v.rank,cls:v.cls,vacId:v.id,note:note||''});}
+function offerRecall(vacId,mId){
+  const v=state.vacancies.find(x=>x.id===vacId); const rec=rankCandidates(v)[0]; const m=state.members[mId];
+  if(rec&&rec.id!==mId)logEvent('override',v,mId,`Offered ${m.fyHours}h member over recommended ${rec.id} (${rec.fyHours}h)`);
+  logEvent('offer',v,mId,(rec&&rec.id===mId)?'Recommended — fewest recall hours':'Override offer');
+  v.offer={memberId:mId}; save(); render();
+  toast('','Recall offered',`Offer sent to ${mId} (simulated). Awaiting accept/decline within 30 min.`);
+}
+function respondOffer(vacId,accept){
+  const v=state.vacancies.find(x=>x.id===vacId); if(!v.offer)return; const mId=v.offer.memberId;
+  if(accept){logEvent('accept',v,mId,'Accepted recall'); v.offer=null; assign(vacId,mId);}
+  else{logEvent('decline',v,mId,'Declined recall'); (v.declined||(v.declined=[])).push(mId); v.offer=null; save(); render(); toast('warn','Declined',`${mId} declined — next eligible surfaced.`);}
+}
 function assign(vacId,mId){
   const v=state.vacancies.find(x=>x.id===vacId); const m=state.members[mId];
   v.assigneeId=mId; v.status='filled';
   m.fyHours=Math.min(FY_CAP,m.fyHours+v.hours);
+  logEvent('assign',v,mId,`Recalled to ${stById(v.stationId).name} ${v.cls} · ${v.hours}h`);
   notify(`${m.id} assigned to ${stById(v.stationId).name} ${v.cls} (${fmtShort(v.date)}, ${v.hours}h).`);
   state.modal=null; save();
   // show the "today vs system" payoff for the hero
@@ -772,9 +866,14 @@ function csvAssign(){const rows=[['Member','Station','Apparatus','Date','Hours',
   state.vacancies.filter(v=>v.assigneeId).forEach(v=>rows.push([v.assigneeId,stById(v.stationId).name,v.cls,v.date,v.hours,v.type,v.reason]));
   if(rows.length===1)rows.push(['(no assignments yet this session)','','','','','','']);
   downloadCSV('assignments.csv',rows);}
+function csvAudit(){const rows=[['Time','Event','Member','Station','Rank','Apparatus','By','Note']];
+  (state.log||[]).forEach(e=>rows.push([e.t,e.type,e.memberId,e.station,e.rank,e.cls,e.by,e.note]));
+  if(rows.length===1)rows.push(['(no events logged yet)','','','','','','','']);
+  downloadCSV('audit-log.csv',rows);}
 
 window.filterRoster=function(q){q=q.toLowerCase();document.querySelectorAll('#rosterBody tr').forEach(tr=>{tr.style.display=tr.dataset.q.includes(q)?'':'none';});};
 window.updateClassOpts=function(){const s=stById(document.querySelector('#cStation').value);document.querySelector('#cClass').innerHTML=s.companies.map(c=>`<option>${c.c}</option>`).join('');};
+window.setRate=function(v){state.otRate=Math.max(0,parseFloat(v)||0);save();render();};
 
 /* ---------- modal plumbing ---------- */
 function modalShell(title,body,footer){return `<div class="scrim" data-act="scrim"><div class="modal" role="dialog" aria-modal="true" aria-label="${title}">
@@ -791,7 +890,9 @@ document.addEventListener('click',e=>{
   const t=e.target.closest('[data-act]'); if(!t)return; const a=t.dataset.act;
   if(a==='nav'){state.view=t.dataset.v;render();}
   else if(a==='fill'){state.modal={type:'fill',id:t.dataset.id};render();}
-  else if(a==='assign'){assign(t.dataset.vac,t.dataset.m);}
+  else if(a==='offer'){offerRecall(t.dataset.vac,t.dataset.m);}
+  else if(a==='acceptoffer'){respondOffer(t.dataset.vac,true);}
+  else if(a==='declineoffer'){respondOffer(t.dataset.vac,false);}
   else if(a==='closemodal'||a==='scrim'){if(a==='scrim'&&e.target!==t)return;state.modal=null;render();}
   else if(a==='bid'){placeBid(t.dataset.id);}
   else if(a==='setavail'){setAvail(t.dataset.d,true);}
@@ -801,6 +902,7 @@ document.addEventListener('click',e=>{
   else if(a==='createvac'){createVac();}
   else if(a==='csvHours'){csvHours();}
   else if(a==='csvAssign'){csvAssign();}
+  else if(a==='csvAudit'){csvAudit();}
   else if(a==='dismissintro'){state.introDismissed=true;save();render();}
 });
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&state.modal){state.modal=null;render();}});
