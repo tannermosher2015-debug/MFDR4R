@@ -349,38 +349,64 @@ const STATIONS=[
  {id:'s14',name:'Wailea',island:'Maui',remote:false,bn:'Bn 1',companies:[{c:'Engine',min:5},{c:'Ladder',min:5},{c:'Tanker',min:1}]},
 ];
 const stById=id=>STATIONS.find(s=>s.id===id);
-const RANKS=[['FF I',.30],['FF II',.24],['FF III',.25],['Captain',.18],['BC',.03]];
-const RANKLIST=['FF I','FF II','FF III','Captain','BC'];
-function pick(rng,weighted){let r=rng();for(const[v,w]of weighted){if((r-=w)<0)return v;}return weighted[0][0];}
+const STEPS=['E','F','G','H','L1','L2','L3','L4','L5','L6'];
+const GRADES=['SR15','SR17','SR19','SR21','SR23','SR25'];
+const RANK_OF_GRADE={'SR15':'Recruit','SR17':'FF I','SR19':'FF II','SR21':'FF III','SR23':'Lieutenant','SR25':'Captain'};
+const GRADE_OF_RANK={'Recruit':'SR15','FF I':'SR17','FF II':'SR19','FF III':'SR21','Lieutenant':'SR23','Captain':'SR25'};
+const RANKLIST=['Recruit','FF I','FF II','FF III','Lieutenant','Captain'];
+// BU 11 salary schedule, Exhibit E eff. 7/1/24 — base 56-hour-week hourly rate by grade/step
+const SALARY={
+ 'SR15':{E:21.93},
+ 'SR17':{E:23.72,F:24.66,G:25.64,H:26.67,L1:27.73,L2:28.84,L3:30.00,L4:31.20,L5:32.45,L6:33.77},
+ 'SR19':{E:25.64,F:26.67,G:27.73,H:28.84,L1:30.00,L2:31.20,L3:32.45,L4:33.77,L5:35.10,L6:36.51},
+ 'SR21':{E:27.73,F:28.84,G:30.00,H:31.20,L1:32.45,L2:33.77,L3:35.10,L4:36.51,L5:37.96,L6:39.48},
+ 'SR23':{E:30.00,F:31.20,G:32.45,H:33.77,L1:35.10,L2:36.51,L3:37.96,L4:39.48,L5:41.05,L6:42.70},
+ 'SR25':{E:32.45,F:33.77,G:35.10,H:36.51,L1:37.96,L2:39.48,L3:41.05,L4:42.70,L5:44.42,L6:46.20}
+};
+// July 2024 Jurisdiction-M Unit 11 scattergram — FTE by grade × step (286 total)
+const SCATTER={
+ 'SR15':{E:1},
+ 'SR17':{E:40,F:35,G:35,H:8,L1:5,L2:3,L3:1,L4:3,L5:1},
+ 'SR19':{G:3,H:5,L1:4,L2:1},
+ 'SR21':{G:4,H:11,L1:24,L2:10,L3:9,L4:20,L5:2},
+ 'SR23':{L2:2},
+ 'SR25':{L2:7,L3:13,L4:23,L5:8,L6:8}
+};
+const OT_MULT=1.5;                                            // recall paid at 1.5× base (FLSA)
+function baseHourly(m){const g=SALARY[m.grade]||{};return g[m.step]!=null?g[m.step]:(g.E||0);}
+function otRate(m){return baseHourly(m)*OT_MULT;}
+function annualPay(m){return Math.round(baseHourly(m)*2912);}  // 56 hrs × 52.07 wks ≈ 2912 hrs/yr
 function sampleHours(rng){const r=rng();let h;if(r<.16)h=rng()*64;else if(r<.78)h=84+rng()*132;else h=216+rng()*72;return Math.min(FY_CAP,Math.round(h/12)*12);}
 
 function buildMembers(){
   const rng=mulberry32(20260619); const members={}; let id=1001;
-  // weight station selection by number of companies (bigger stations hold more people)
   const pool=[]; STATIONS.forEach(s=>{const w=s.companies.length+1;for(let i=0;i<w;i++)pool.push(s.id);});
-  for(let n=0;n<200;n++){
-    const stationId=pool[Math.floor(rng()*pool.length)]; const st=stById(stationId);
-    const platoon=['R','G','B'][n%3];
-    const rank=pick(rng,RANKS);
-    const qual=new Set(['Engine']);
-    st.companies.forEach(c=>{if(c.c!=='Engine'&&rng()<.55)qual.add(c.c);});
-    if(rng()<.2)qual.add(CLASSES[Math.floor(rng()*CLASSES.length)]); // occasional cross-qual
-    const ql=[...qual];
-    members['FF-'+id]={id:'FF-'+id,rank,homeStationId:stationId,platoon,
-      qualifiedClasses:ql.length?ql:['Engine'],
-      fyHours:sampleHours(rng), holdBackHours:rng()<.28?Math.round(rng()*6)*12:0,
-      dayOfPrefs:ql.filter(()=>rng()<.7), suspendedUntil: rng()<.04?'2026-07-15':null};
-    id++;
-  }
-  // ---- hero candidates: a clean rank-for-rank equity story for the June 19 Engine 6 (Kīhei) FF I sick call ----
-  const hero=[
-    {id:'FF-1042',rank:'FF I',homeStationId:'s11',platoon:'B',qualifiedClasses:['Engine'],fyHours:24,holdBackHours:48,dayOfPrefs:['Engine'],suspendedUntil:null}, // Nāpili – lowest hrs, lots of hold-back
-    {id:'FF-1108',rank:'FF I',homeStationId:'s14',platoon:'B',qualifiedClasses:['Engine','Tanker'],fyHours:48,holdBackHours:12,dayOfPrefs:['Engine'],suspendedUntil:null}, // Wailea – same island
-    {id:'FF-1153',rank:'FF I',homeStationId:'s4',platoon:'B',qualifiedClasses:['Engine'],fyHours:72,holdBackHours:24,dayOfPrefs:['Engine'],suspendedUntil:null}, // Kaunakakai/Molokaʻi – county-wide (off-island) reach
-    {id:'FF-1190',rank:'FF I',homeStationId:'s6',platoon:'B',qualifiedClasses:['Engine'],fyHours:168,holdBackHours:0,dayOfPrefs:['Engine'],suspendedUntil:null}, // Kīhei – SAME STATION but near cap → ranked low (equity beats proximity)
-    {id:'FF-1067',rank:'FF I',homeStationId:'s10',platoon:'B',qualifiedClasses:['Engine','Ladder','Hazmat'],fyHours:96,dayOfPrefs:['Engine'],holdBackHours:0,suspendedUntil:null}, // Kahului
-  ];
-  hero.forEach(h=>members[h.id]=h);
+  let p=0;
+  // generate the real Jurisdiction-M scattergram exactly: one anonymized FTE per (grade, step) count
+  GRADES.forEach(grade=>{ const rank=RANK_OF_GRADE[grade];
+    STEPS.forEach(step=>{ const n=(SCATTER[grade]||{})[step]||0; for(let i=0;i<n;i++){
+      const stationId=pool[Math.floor(rng()*pool.length)]; const st=stById(stationId);
+      const platoon=['R','G','B'][p++%3];
+      const qual=new Set(['Engine']);
+      st.companies.forEach(c=>{if(c.c!=='Engine'&&rng()<.55)qual.add(c.c);});
+      if(rng()<.2)qual.add(CLASSES[Math.floor(rng()*CLASSES.length)]);
+      const ql=[...qual];
+      members['FF-'+id]={id:'FF-'+id,rank,grade,step,homeStationId:stationId,platoon,
+        qualifiedClasses:ql, fyHours:sampleHours(rng), holdBackHours:rng()<.28?Math.round(rng()*6)*12:0,
+        dayOfPrefs:ql.filter(()=>rng()<.7), suspendedUntil: rng()<.04?'2026-07-15':null};
+      id++;
+    }});
+  });
+  // hero scenario: tune a few SR17 (FF I) members' station/platoon/hours for the Kīhei sick-call story
+  // (grade & step untouched, so the real scattergram totals stay exact)
+  const heroT={
+    'FF-1042':{homeStationId:'s11',platoon:'B',fyHours:24,holdBackHours:48,qualifiedClasses:['Engine']},          // Nāpili – lowest hrs
+    'FF-1015':{homeStationId:'s4',platoon:'B',fyHours:36,holdBackHours:24,qualifiedClasses:['Engine']},            // Kaunakakai/Molokaʻi – off-island reach
+    'FF-1090':{homeStationId:'s14',platoon:'B',fyHours:60,holdBackHours:12,qualifiedClasses:['Engine','Tanker']},  // Wailea
+    'FF-1067':{homeStationId:'s10',platoon:'B',fyHours:96,holdBackHours:0,qualifiedClasses:['Engine','Ladder','Hazmat']}, // Kahului
+    'FF-1108':{homeStationId:'s6',platoon:'B',fyHours:168,holdBackHours:0,qualifiedClasses:['Engine']},            // Kīhei – SAME station, near cap → ranked low
+  };
+  Object.keys(heroT).forEach(hid=>{ if(members[hid]) Object.assign(members[hid],heroT[hid]); });
   return members;
 }
 
@@ -403,7 +429,7 @@ function buildSeed(){
 }
 
 /* ============================================================ 3. STATE STORE */
-const LS='mfd-ot-recall-v4';
+const LS='mfd-ot-recall-v5';
 let state;
 function seedLog(){return [
   {t:'07:42',type:'assign',by:'BC 1',memberId:'FF-1067',station:'Kahului',rank:'FF I',cls:'Engine',note:'Accepted advance bid (VAC) — recommended #1'},
@@ -460,9 +486,9 @@ function render(){
   $('#dateLbl').textContent=fmt(state.demoDate);
   // role select
   const sel=$('#roleSel');
-  const feat=['FF-1042','FF-1190','FF-1108'];
+  const feat=['FF-1042','FF-1200','FF-1250'];
   sel.innerHTML=`<option value="bc1">Battalion Chief 1</option><option value="bc2">Battalion Chief 2</option>`+
-    feat.map(id=>{const m=state.members[id];return `<option value="${id}">${id} · ${m.rank} · ${stById(m.homeStationId).name}</option>`;}).join('');
+    feat.map(id=>{const m=state.members[id];return m?`<option value="${id}">${id} · ${m.grade} ${m.rank} · ${stById(m.homeStationId).name}</option>`:'';}).join('');
   sel.value=state.role;
   // tabs
   const items=isBC()?NAV.bc:NAV.ff;
@@ -506,7 +532,7 @@ function viewCmd(){
   <div class="bd tight">${today.length?`<table class="resp"><thead><tr><th>Station</th><th>Apparatus</th><th>Shift</th><th>Reason</th><th>Status</th><th></th></tr></thead><tbody>
     ${today.map(v=>{const st=stById(v.stationId);return `<tr>
       <td data-label="Station"><b>${st.name}</b><div style="font-size:11.5px;color:var(--muted)">${st.island}${st.remote?' · Remote 72':''}</div></td>
-      <td data-label="Apparatus"><b>${v.rank}</b> · ${v.cls}</td><td data-label="Shift" class="mono">${segLabel(v.segment)} <span style="color:var(--muted)">(${v.hours}h)</span></td>
+      <td data-label="Apparatus"><b>${GRADE_OF_RANK[v.rank]||''} ${v.rank}</b> · ${v.cls}</td><td data-label="Shift" class="mono">${segLabel(v.segment)} <span style="color:var(--muted)">(${v.hours}h)</span></td>
       <td data-label="Reason">${reasonLbl(v.reason)}</td>
       <td data-label="Status">${v.wouldHoldBack?'<span class="pill crit">Hold-back risk</span>':'<span class="pill warn">'+ratioStr(v)+' · short '+v.shortBy+'</span>'}</td>
       <td class="act" style="text-align:right"><button class="btn primary sm" data-act="fill" data-id="${v.id}">Fill fairly →</button></td></tr>`;}).join('')}
@@ -514,7 +540,7 @@ function viewCmd(){
   <div style="height:16px"></div>
   <div class="card"><div class="hd"><h3>Upcoming scheduled openings</h3><span class="spacer"></span><span class="pill accent">Advance · 48-hr bid</span></div>
   <div class="bd tight"><table class="resp"><thead><tr><th>Date</th><th>Station</th><th>Apparatus</th><th>Shift</th><th>Bids</th><th></th></tr></thead><tbody>
-   ${sched.map(v=>{const st=stById(v.stationId);return `<tr><td data-label="Date" class="mono">${fmtShort(v.date)}</td><td data-label="Station"><b>${st.name}</b></td><td data-label="Apparatus"><b>${v.rank}</b> · ${v.cls}</td><td data-label="Shift" class="mono">${segLabel(v.segment)}</td>
+   ${sched.map(v=>{const st=stById(v.stationId);return `<tr><td data-label="Date" class="mono">${fmtShort(v.date)}</td><td data-label="Station"><b>${st.name}</b></td><td data-label="Apparatus"><b>${GRADE_OF_RANK[v.rank]||''} ${v.rank}</b> · ${v.cls}</td><td data-label="Shift" class="mono">${segLabel(v.segment)}</td>
      <td data-label="Bids">${v.bids.length?`<span class="pill accent">${v.bids.length} bid${v.bids.length>1?'s':''}</span>`:'<span class="pill muted">none yet</span>'}</td>
      <td class="act" style="text-align:right"><button class="btn sm" data-act="fill" data-id="${v.id}">Review & assign</button></td></tr>`;}).join('')}
   </tbody></table></div></div>`;
@@ -546,11 +572,11 @@ function fillModal(vacId){
         : `<button class="btn primary sm" data-act="offer" data-vac="${v.id}" data-m="${m.id}">Offer recall →</button>`;
     return `<div class="cand ${i===0?'top':''}">
       <div class="rank">${i+1}</div>
-      <div class="who"><b>${m.id}</b><div style="font-size:11.5px;color:var(--muted)">${m.rank} · ${stById(m.homeStationId).name}</div></div>
+      <div class="who"><b>${m.id}</b><div style="font-size:11.5px;color:var(--muted)">${m.grade}·${m.step} ${m.rank} · ${stById(m.homeStationId).name}</div></div>
       <div class="why">
         ${i===0?'<span class="chip good">★ Recommended</span>':''}
         <span class="tierbadge ${t<=2?'t'+t:''}">${TIERLBL[t]}</span>
-        <span class="chip good">✓ ${v.rank}</span>
+        <span class="chip good">✓ ${GRADE_OF_RANK[v.rank]||''} ${v.rank}</span>
         <span class="chip good">✓ ${v.cls}-qual</span>
         <span class="chip good">✓ 4-day off · 34-hr OK</span>
         ${bid?'<span class="chip">🖐 bid</span>':''}
@@ -560,17 +586,17 @@ function fillModal(vacId){
         <div style="font-size:11px;color:var(--muted)">${remaining(m)}h remaining</div></div>
       ${action}
     </div>`;}).join('');
-  return modalShell(`Fill vacancy — ${st.name} ${v.rank} · ${v.cls}`,`
+  return modalShell(`Fill vacancy — ${st.name} ${GRADE_OF_RANK[v.rank]||''} ${v.rank} · ${v.cls}`,`
     <div class="kv" style="margin-bottom:14px">
       <dt>Station</dt><dd>${st.name} · ${st.island}${st.remote?' · Remote 72':''}</dd>
-      <dt>Position</dt><dd>${v.rank} · ${v.cls} — staffing ${ratioStr(v)} (min ${coMin(v)})</dd>
+      <dt>Position</dt><dd>${GRADE_OF_RANK[v.rank]||''} ${v.rank} · ${v.cls} — staffing ${ratioStr(v)} (min ${coMin(v)})</dd>
       <dt>Shift</dt><dd>${fmt(v.date)} · ${segLabel(v.segment)} · ${v.hours}h</dd>
       <dt>Reason</dt><dd>${reasonLbl(v.reason)} · ${v.type}</dd>
     </div>
     ${v.wouldHoldBack?`<div class="note" style="border-color:var(--crit);color:var(--crit);background:var(--crit-bg);margin-bottom:14px">
       <b>Today's manual outcome:</b> no one at ${st.name} can backfill → an off-going member gets <b>held back</b> to hold minimum staffing. Those hours don't even count toward their recall total.</div>`:''}
     <h4 style="margin:0 0 4px">Eligible counterparts — ranked by fewest recall hours (equity-first)</h4>
-    <p style="margin:0 0 14px;color:var(--muted);font-size:13px">${cands.length} eligible county-wide. Rank-for-rank (${v.rank}↔${v.rank}) + similar-function (${v.cls}↔${v.cls}), within 4-day off, under the 34-hr cap. <b>Offer the recommended member</b> — they accept or decline (30-min window). Offering anyone below the recommendation is logged as an override.</p>
+    <p style="margin:0 0 14px;color:var(--muted);font-size:13px">${cands.length} eligible county-wide. Grade-for-grade (${GRADE_OF_RANK[v.rank]}↔${GRADE_OF_RANK[v.rank]}, ${v.rank}) + similar-function (${v.cls}↔${v.cls}), within 4-day off, under the 34-hr cap. <b>Offer the recommended member</b> — they accept or decline (30-min window). Offering anyone below the recommendation is logged as an override.</p>
     ${rows||'<div class="note">No eligible counterparts found.</div>'}
   `,`<button class="btn" data-act="closemodal">Close</button>`);
 }
@@ -622,7 +648,7 @@ function viewRoster(){
 }
 function rosterRow(m){const susp=m.suspendedUntil&&m.suspendedUntil>=state.demoDate;
   return `<tr data-q="${(m.id+' '+m.rank+' '+stById(m.homeStationId).name+' '+m.platoon).toLowerCase()}">
-   <td data-label="ID"><b class="mono">${m.id}</b></td><td data-label="Rank">${m.rank}</td><td data-label="Station">${stById(m.homeStationId).name}</td>
+   <td data-label="ID"><b class="mono">${m.id}</b></td><td data-label="Rank">${m.rank}<div style="font-size:11px;color:var(--muted)">${m.grade} · step ${m.step}</div></td><td data-label="Station">${stById(m.homeStationId).name}</td>
    <td data-label="Platoon"><span class="ptag ${m.platoon}">${m.platoon}</span></td>
    <td data-label="Qualified" style="font-size:12px;color:var(--muted)">${m.qualifiedClasses.join(', ')}</td>
    <td data-label="Recall hrs" style="min-width:150px">${hoursBar(m.fyHours)}<span class="mono" style="font-size:11px">${m.fyHours}/${FY_CAP}h${m.holdBackHours?' (+'+m.holdBackHours+' HB)':''}</span></td>
@@ -636,7 +662,7 @@ function viewCreate(){
     <div class="grid" style="gap:14px">
       <div class="field"><label for="cStation">Station</label><select id="cStation" onchange="updateClassOpts()">${STATIONS.map(s=>`<option value="${s.id}">${s.name} (${s.island}${s.remote?', Remote 72':''})</option>`).join('')}</select></div>
       <div class="field"><label for="cClass">Apparatus</label><select id="cClass">${STATIONS[0].companies.map(c=>`<option>${c.c}</option>`).join('')}</select></div>
-      <div class="field"><label for="cRank">Rank (rank-for-rank)</label><select id="cRank"><option>FF I</option><option>FF II</option><option>FF III</option><option>Captain</option><option>BC</option></select></div>
+      <div class="field"><label for="cRank">Rank / grade (grade-for-grade)</label><select id="cRank">${RANKLIST.map(r=>`<option>${r}</option>`).join('')}</select></div>
       <div class="field"><label for="cDate">Shift date</label><input type="date" id="cDate" value="${addDays(state.demoDate,3)}"></div>
       <div class="field"><label for="cSeg">Coverage</label><select id="cSeg"><option value="full24">24-hour (0730–0730)</option><option value="0730-1930">Day (0730–1930, 12h)</option><option value="1930-0730">Night (1930–0730, 12h)</option></select></div>
       <div class="field"><label for="cReason">Reason</label><select id="cReason"><option value="VAC">Vacation [VAC]</option><option value="SA">Special Assignment [SA]</option><option value="FL">Funeral Leave [FL]</option><option value="SL">Sick Leave [SL]</option><option value="SUBO">Substitution [SUBO]</option></select></div>
@@ -664,42 +690,42 @@ function viewReports(){
 /* ---------- BC: Cost & Coverage ---------- */
 function money(n){return '$'+Math.round(n).toLocaleString('en-US');}
 function viewCost(){
-  const ms=Object.values(state.members); const rate=state.otRate||55;
+  const ms=Object.values(state.members);
+  const recallCost=ms.reduce((a,m)=>a+m.fyHours*otRate(m),0);
+  const holdCost=ms.reduce((a,m)=>a+(m.holdBackHours||0)*otRate(m),0);
+  const payroll=ms.reduce((a,m)=>a+annualPay(m),0);
   const recallHrs=ms.reduce((a,m)=>a+m.fyHours,0);
   const holdHrs=ms.reduce((a,m)=>a+(m.holdBackHours||0),0);
-  const recallCost=recallHrs*rate, holdCost=holdHrs*rate;
-  const sorted=[...ms].sort((a,b)=>b.fyHours-a.fyHours);
+  const otPct=payroll?(recallCost/payroll*100):0;
+  const sorted=[...ms].sort((a,b)=>b.fyHours*otRate(b)-a.fyHours*otRate(a));
   const topN=Math.ceil(ms.length*0.1);
-  const topHrs=sorted.slice(0,topN).reduce((a,m)=>a+m.fyHours,0);
-  const conc=recallHrs?Math.round(topHrs/recallHrs*100):0;
-  const openToday=state.vacancies.filter(v=>v.status==='open'&&v.date===state.demoDate);
-  const holdRisk=openToday.filter(v=>v.wouldHoldBack).length;
-  const byRank=RANKLIST.map(r=>{const g=ms.filter(m=>m.rank===r);const h=g.reduce((a,m)=>a+m.fyHours,0);return{r,h,cost:h*rate};});
-  const maxRankCost=Math.max(...byRank.map(b=>b.cost),1);
-  return `<div class="page-head"><div><h2>Cost &amp; Coverage</h2><p>The budget and staffing side of recall — fiscal year to date</p></div>
-   <span class="spacer"></span><label style="display:flex;align-items:center;gap:8px"><span style="font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--faint);font-weight:700">Assumed OT rate $/hr</span><input type="number" id="otRate" value="${rate}" min="0" step="1" style="width:84px" onchange="setRate(this.value)"></label></div>
+  const topCost=sorted.slice(0,topN).reduce((a,m)=>a+m.fyHours*otRate(m),0);
+  const conc=recallCost?Math.round(topCost/recallCost*100):0;
+  const byGrade=GRADES.map(g=>{const grp=ms.filter(m=>m.grade===g);const cost=grp.reduce((a,m)=>a+m.fyHours*otRate(m),0);const hrs=grp.reduce((a,m)=>a+m.fyHours,0);return{g,rank:RANK_OF_GRADE[g],n:grp.length,hrs,cost};}).filter(b=>b.n);
+  const maxGradeCost=Math.max(...byGrade.map(b=>b.cost),1);
+  return `<div class="page-head"><div><h2>Cost &amp; Coverage</h2><p>Real BU 11 wages (Exhibit E, eff. 7/1/24) · ${ms.length} FTE · recall at 1.5× the 56-hr base hourly</p></div></div>
   <div class="grid cols-4" style="margin-bottom:18px">
     ${statCard('Recall OT spend',money(recallCost),`${recallHrs.toLocaleString()} hrs YTD`,'')}
     ${statCard('Hold-back OT cost',money(holdCost),`${holdHrs.toLocaleString()} forced hrs — the status-quo tax`,'crit')}
-    ${statCard('OT concentration',conc+'%',`carried by the top 10% of earners`,(conc>30?'warn':'ok'))}
-    ${statCard('Short right now',openToday.length,`${holdRisk} would force a hold-back`,(openToday.length?'crit':'ok'))}
+    ${statCard('OT % of base payroll',otPct.toFixed(1)+'%',`of ${money(payroll)} annual base`,(otPct>8?'warn':'ok'))}
+    ${statCard('OT concentration',conc+'%',`of recall $ to the top 10%`,(conc>30?'warn':'ok'))}
   </div>
   <div class="split" style="margin-bottom:18px">
     <div class="before"><h4>✕ Status quo (manual)</h4><ul>
       <li><b>${money(holdCost)}</b> in hold-back / forced OT this year — people held over because no system filled the gap.</li>
-      <li>OT concentrated: the top 10% carry <b>${conc}%</b> of recall hours (burnout + grievance risk).</li>
+      <li>OT dollars concentrated: the top 10% earn <b>${conc}%</b> of recall pay (burnout + grievance risk).</li>
       <li>Fills happen by phone tree — slow, and whoever answers first wins.</li>
       <li>No record of who was offered, or why.</li></ul></div>
     <div class="after"><h4>✓ With the system</h4><ul>
-      <li>Hold-backs become <b>planned recalls</b> — the same hours, fairly assigned, not forced.</li>
-      <li>Distribution levels toward the average — no one buried, no one shut out.</li>
+      <li>Hold-backs become <b>planned recalls</b> — the same dollars, fairly assigned, not forced.</li>
+      <li>OT levels toward an even share — no one buried, no one shut out.</li>
       <li>Eligible counterparts ranked <b>instantly</b>, county-wide.</li>
       <li>Every offer, accept, decline &amp; assignment <b>logged</b> (see Audit Log).</li></ul></div>
   </div>
-  <div class="card"><div class="hd"><h3>Recall OT cost by rank</h3></div><div class="bd tight"><table class="resp"><thead><tr><th>Rank</th><th>Recall hours</th><th>Cost (YTD)</th><th></th></tr></thead><tbody>
-    ${byRank.map(b=>`<tr><td data-label="Rank"><b>${b.r}</b></td><td data-label="Recall hours" class="mono">${b.h.toLocaleString()}h</td><td data-label="Cost" class="mono">${money(b.cost)}</td><td data-label="" style="width:42%"><div class="bar"><i style="width:${Math.round(b.cost/maxRankCost*100)}%"></i></div></td></tr>`).join('')}
+  <div class="card"><div class="hd"><h3>Recall OT cost by grade</h3></div><div class="bd tight"><table class="resp"><thead><tr><th>Grade</th><th>FTE</th><th>Recall hours</th><th>Cost (YTD)</th><th></th></tr></thead><tbody>
+    ${byGrade.map(b=>`<tr><td data-label="Grade"><b>${b.g}</b> · ${b.rank}</td><td data-label="FTE" class="mono">${b.n}</td><td data-label="Recall hours" class="mono">${b.hrs.toLocaleString()}h</td><td data-label="Cost" class="mono">${money(b.cost)}</td><td data-label="" style="width:34%"><div class="bar"><i style="width:${Math.round(b.cost/maxGradeCost*100)}%"></i></div></td></tr>`).join('')}
   </tbody></table></div></div>
-  <p class="note" style="margin-top:14px">Costs are illustrative — they scale with the assumed OT rate above; drop in MFD's real blended recall rate to size the real numbers. Hours come from this demo's anonymized roster.</p>`;
+  <p class="note" style="margin-top:14px">Wages are the real <b>BU 11 salary schedule (Exhibit E, eff. 7/1/24)</b> at each member's grade/step; recall is paid at <b>1.5× the 56-hour base hourly</b>. The ${ms.length}-FTE roster matches the real July 2024 Jurisdiction-M scattergram by grade and step. Recall <i>hours</i> are modeled; identities are anonymized.</p>`;
 }
 
 /* ---------- BC: Audit Log ---------- */
@@ -727,7 +753,7 @@ function viewHow(){
   return `<div class="page-head"><div><h2>How it works</h2><p>How the system decides every recall — grounded in MFD's Rank-for-Rank Recall Program (eff. 11/1/2025)</p></div>
    <span class="spacer"></span><button class="btn sm" data-act="print">⎙ Print this page</button></div>
   <div class="grid cols-2">
-   ${card('1 · Rank-for-rank',`A vacancy is filled by the <b>same rank</b> — FF I covers FF I, a Captain covers a Captain, and so on. The board never backfills a position with the wrong rank.`)}
+   ${card('1 · Grade-for-grade (rank-for-rank)',`A vacancy is filled by the <b>same grade/rank</b> — an <b>SR17 (FF I)</b> covers an SR17, an <b>SR25 (Captain)</b> covers an SR25, and so on. Pay follows each member's grade <b>and step</b> on the BU 11 salary schedule. The board never backfills with the wrong grade.`)}
    ${card('2 · Similar function — any battalion or island',`Matching is by apparatus class: <b>Engine↔Engine, Ladder↔Ladder, Tanker, Hazmat, Rescue, BC Aid</b> — and per the policy, <b>regardless of Battalion or island</b>. A qualified Engine counterpart on Lānaʻi can fill an Engine vacancy on Maui.`)}
    ${card('3 · Who is eligible',`To be offered a recall, a member must be: off-duty that shift · in their upcoming <b>4-day-off window</b> (Kelly 9-day rotation) · under the <b>${STRAIGHT_CAP}-hour</b> continuous-work cap (no back-to-back 24s) · under their <b>${FY_CAP}-hour</b> annual guarantee (any balance below 12 hrs may finish it) · qualified on the apparatus · not on disqualifying leave or suspended.`)}
    ${card('4 · Who is offered first — the equity layer',`Among everyone eligible, the member with the <b>fewest fiscal-year recall hours wins</b>. Ties break toward in-company → same island → county-wide. This is the fair upgrade on the policy's literal first-come-first-serve: overtime self-levels toward the ${FY_CAP}-hour guarantee instead of piling onto whoever answers the phone first.`)}
@@ -746,10 +772,10 @@ function viewHome(){
   const fewer=all.filter(x=>x.fyHours>m.fyHours).length; const standing=Math.round(fewer/all.length*100);
   const mine=state.vacancies.filter(v=>v.assigneeId===m.id).sort((a,b)=>a.date.localeCompare(b.date));
   const myBids=state.vacancies.filter(v=>(v.bids||[]).includes(m.id)&&!v.assigneeId);
-  return `<div class="page-head"><div><h2>My Recall</h2><p>${m.id} · ${m.rank} · ${stById(m.homeStationId).name} · <span class="ptag ${m.platoon}">${m.platoon}</span> ${PLATOON[m.platoon].name}</p></div></div>
+  return `<div class="page-head"><div><h2>My Recall</h2><p>${m.id} · ${m.grade}·${m.step} ${m.rank} · ${stById(m.homeStationId).name} · <span class="ptag ${m.platoon}">${m.platoon}</span> ${PLATOON[m.platoon].name}</p></div></div>
   <div class="grid cols-3" style="margin-bottom:18px">
     <div class="card stat"><div class="k">Recall hours this FY</div><div class="v">${m.fyHours}<span style="font-size:16px;color:var(--muted)"> / ${FY_CAP}h</span></div>
-      <div style="margin-top:10px">${hoursBar(m.fyHours)}</div><div class="sub">${remaining(m)}h remaining of your guarantee</div></div>
+      <div style="margin-top:10px">${hoursBar(m.fyHours)}</div><div class="sub">${remaining(m)}h remaining · ${money(m.fyHours*otRate(m))} earned at $${otRate(m).toFixed(2)}/hr OT</div></div>
     <div class="card stat"><div class="k">Hold-back hours</div><div class="v" style="color:var(--warn)">${m.holdBackHours||0}<span style="font-size:16px;color:var(--muted)">h</span></div>
       <div class="sub">Held for min staffing — <b>not</b> counted against your ${FY_CAP}h</div></div>
     <div class="card stat"><div class="k">Equity standing</div><div class="v" style="color:var(--ok)">${standing}%</div>
@@ -829,7 +855,8 @@ function viewProfile(){
   return `<div class="page-head"><div><h2>Profile</h2><p>${m.id} — contact info & Day-Of apparatus preferences</p></div></div>
   <div class="grid cols-2">
    <div class="card"><div class="hd"><h3>Contact (for confirmations)</h3></div><div class="bd"><dl class="kv">
-     <dt>Member ID</dt><dd class="mono">${m.id}</dd><dt>Rank</dt><dd>${m.rank}</dd>
+     <dt>Member ID</dt><dd class="mono">${m.id}</dd><dt>Rank / grade</dt><dd>${m.rank} · ${m.grade} step ${m.step}</dd>
+     <dt>Base / OT rate</dt><dd class="mono">$${baseHourly(m).toFixed(2)} → $${otRate(m).toFixed(2)}/hr (1.5×)</dd>
      <dt>Home station</dt><dd>${stById(m.homeStationId).name} · ${stById(m.homeStationId).island}${stById(m.homeStationId).remote?' · Remote 72':''}</dd>
      <dt>Platoon</dt><dd><span class="ptag ${m.platoon}">${m.platoon}</span> ${PLATOON[m.platoon].name}</dd>
      <dt>Mobile</dt><dd class="mono">808-555-${m.id.slice(-4)}</dd><dt>Email</dt><dd class="mono">${m.id.toLowerCase()}@mfd.demo</dd>
@@ -909,8 +936,8 @@ function createVac(){const stationId=$('#cStation').value,cls=$('#cClass').value
 function downloadCSV(name,rows){const csv=rows.map(r=>r.map(x=>`"${String(x).replace(/"/g,'""')}"`).join(',')).join('\n');
   const b=new Blob([csv],{type:'text/csv'});const u=URL.createObjectURL(b);const a=document.createElement('a');a.href=u;a.download=name;a.click();URL.revokeObjectURL(u);
   toast('ok','Exported',name);}
-function csvHours(){const rows=[['Member','Rank','Station','Island','Platoon','RecallHours','HoldBackHours','RemainingOfCap']];
-  Object.values(state.members).sort((a,b)=>a.fyHours-b.fyHours).forEach(m=>rows.push([m.id,m.rank,stById(m.homeStationId).name,stById(m.homeStationId).island,m.platoon,m.fyHours,m.holdBackHours||0,remaining(m)]));
+function csvHours(){const rows=[['Member','Grade','Step','Rank','Station','Island','Platoon','BaseHourly56','OTRate','RecallHours','RecallOTCost','HoldBackHours','RemainingOfCap']];
+  Object.values(state.members).sort((a,b)=>a.fyHours-b.fyHours).forEach(m=>rows.push([m.id,m.grade,m.step,m.rank,stById(m.homeStationId).name,stById(m.homeStationId).island,m.platoon,baseHourly(m).toFixed(2),otRate(m).toFixed(2),m.fyHours,Math.round(m.fyHours*otRate(m)),m.holdBackHours||0,remaining(m)]));
   downloadCSV('recall-hours.csv',rows);}
 function csvAssign(){const rows=[['Member','Station','Apparatus','Date','Hours','Type','Reason']];
   state.vacancies.filter(v=>v.assigneeId).forEach(v=>rows.push([v.assigneeId,stById(v.stationId).name,v.cls,v.date,v.hours,v.type,v.reason]));
@@ -923,7 +950,6 @@ function csvAudit(){const rows=[['Time','Event','Member','Station','Rank','Appar
 
 window.filterRoster=function(q){q=q.toLowerCase();document.querySelectorAll('#rosterBody tr').forEach(tr=>{tr.style.display=tr.dataset.q.includes(q)?'':'none';});};
 window.updateClassOpts=function(){const s=stById(document.querySelector('#cStation').value);document.querySelector('#cClass').innerHTML=s.companies.map(c=>`<option>${c.c}</option>`).join('');};
-window.setRate=function(v){state.otRate=Math.max(0,parseFloat(v)||0);save();render();};
 
 /* ---------- modal plumbing ---------- */
 let modalTrigger=null;
