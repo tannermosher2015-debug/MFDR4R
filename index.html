@@ -232,6 +232,18 @@ tbody tr:hover{background:var(--surface-2)}
   .cell .od{font-size:9px;padding:1px 4px}
   .cell .ev{font-size:9px;padding:2px 4px;line-height:1.15}
 }
+@media print{
+  :root,[data-theme="dark"]{--bg:#fff;--surface:#fff;--surface-2:#fff;--surface-3:#f1f3f6;--text:#111;--muted:#444;--faint:#555;--border:#bbb;--border-strong:#999;--accent:#0b3bbf;--accent-text:#fff;--accent-weak:#eef1fb;--ok:#0a6b34;--ok-bg:#eaf5ee;--warn:#7a4f00;--warn-bg:#f7efdd;--crit:#a11;--crit-bg:#fbeae8;--shadow:none;--shadow-lg:none}
+  header.top, nav.tabs, .footer, #toasts, .intro, .skip, .scrim, input, select, button, td.act, th:last-child{display:none!important}
+  body{background:#fff}
+  .app{max-width:100%;padding:0}
+  main{padding-top:0}
+  .card{box-shadow:none;border:1px solid var(--border);margin-bottom:10px}
+  .scroll{max-height:none!important;overflow:visible!important}
+  .split,.cand,.stat,.card{break-inside:avoid}
+  a{color:#000;text-decoration:none}
+  .page-head{margin-bottom:10px}
+}
 </style>
 </head>
 <body>
@@ -252,6 +264,8 @@ tbody tr:hover{background:var(--surface-2)}
         <div id="dateLbl" class="mono" style="padding:7px 10px;border:1px solid var(--border);border-radius:8px;background:var(--surface-2);font-size:13px"></div>
       </div>
       <button class="iconbtn" id="bell" aria-label="Notifications" title="Notifications">🔔<span class="badge-count" id="bellCount" hidden>0</span></button>
+      <button class="btn sm" data-act="how" title="How the system decides every recall">How it works</button>
+      <button class="iconbtn" data-act="print" aria-label="Print or save as PDF" title="Print / Save as PDF">⎙</button>
       <button class="iconbtn" id="themeBtn" aria-label="Toggle light/dark theme" title="Toggle theme">◐</button>
       <button class="btn sm" id="resetBtn" title="Reset the demo to its starting scenario">↺ Reset demo</button>
     </div>
@@ -436,12 +450,12 @@ function render(){
   sel.value=state.role;
   // tabs
   const items=isBC()?NAV.bc:NAV.ff;
-  if(!items.find(i=>i[0]===state.view))state.view=items[0][0];
+  if(state.view!=='how' && !items.find(i=>i[0]===state.view))state.view=items[0][0];
   $('#tabs').innerHTML=items.map(([k,l])=>`<button data-act="nav" data-v="${k}" ${k===state.view?'aria-current="page"':''}>${l}</button>`).join('');
   // bell
   const n=state.notifications.length;const bc=$('#bellCount');bc.hidden=!n;bc.textContent=n;
   // view
-  const V={cmd:viewCmd,cost:viewCost,create:viewCreate,equity:viewEquity,audit:viewAudit,roster:viewRoster,reports:viewReports,
+  const V={cmd:viewCmd,cost:viewCost,create:viewCreate,equity:viewEquity,audit:viewAudit,roster:viewRoster,reports:viewReports,how:viewHow,
            home:viewHome,opps:viewOpps,avail:viewAvail,profile:viewProfile};
   root.innerHTML=(V[state.view]||(()=>'<p>Not found</p>'))();
   if(state.modal)renderModal();else $('#modalRoot').innerHTML='';
@@ -689,6 +703,24 @@ function viewAudit(){
   <p class="note" style="margin-top:14px">This is the system's defensibility layer: in a grievance, every assignment shows the ranked reason it was made and which offers were declined first — and it's the export you bring to the annual program review with the Union.</p>`;
 }
 
+/* ---------- How it works (any role) ---------- */
+function viewHow(){
+  const card=(t,b)=>`<div class="card"><div class="hd"><h3>${t}</h3></div><div class="bd" style="font-size:13.5px;line-height:1.55">${b}</div></div>`;
+  return `<div class="page-head"><div><h2>How it works</h2><p>How the system decides every recall — grounded in MFD's Rank-for-Rank Recall Program (eff. 11/1/2025)</p></div>
+   <span class="spacer"></span><button class="btn sm" data-act="print">⎙ Print this page</button></div>
+  <div class="grid cols-2">
+   ${card('1 · Rank-for-rank',`A vacancy is filled by the <b>same rank</b> — FF I covers FF I, a Captain covers a Captain, and so on. The board never backfills a position with the wrong rank.`)}
+   ${card('2 · Similar function — any battalion or island',`Matching is by apparatus class: <b>Engine↔Engine, Ladder↔Ladder, Tanker, Hazmat, Rescue, BC Aid</b> — and per the policy, <b>regardless of Battalion or island</b>. A qualified Engine counterpart on Lānaʻi can fill an Engine vacancy on Maui.`)}
+   ${card('3 · Who is eligible',`To be offered a recall, a member must be: off-duty that shift · in their upcoming <b>4-day-off window</b> (Kelly 9-day rotation) · under the <b>${STRAIGHT_CAP}-hour</b> continuous-work cap (no back-to-back 24s) · under their <b>${FY_CAP}-hour</b> annual guarantee (any balance below 12 hrs may finish it) · qualified on the apparatus · not on disqualifying leave or suspended.`)}
+   ${card('4 · Who is offered first — the equity layer',`Among everyone eligible, the member with the <b>fewest fiscal-year recall hours wins</b>. Ties break toward in-company → same island → county-wide. This is the fair upgrade on the policy's literal first-come-first-serve: overtime self-levels toward the ${FY_CAP}-hour guarantee instead of piling onto whoever answers the phone first.`)}
+   ${card('5 · The offer handshake',`The BC <b>offers</b> the recommended member; they <b>accept or decline</b> within the window (48 hrs for scheduled absences, 30 min for unscheduled). A decline drops them and surfaces the next eligible. Offering anyone <b>below</b> the recommendation is recorded as an override — every step lands in the <b>Audit Log</b>.`)}
+   ${card('6 · Hold-back hours never count against you',`When someone is held over to keep a company at minimum staffing, those hours are tracked <b>separately</b> and <b>never count against their ${FY_CAP}-hour total</b>. So the person who got stuck has fewer recall hours on the books — which means the equity engine prioritizes <b>them</b> next time, not penalizes them.`)}
+   ${card('7 · Two Battalion Chiefs',`<b>BC 1</b> and <b>BC 2</b> are always on duty, each administering recall for their own stations' boards. But the eligible pool is always <b>county-wide</b> — the fill isn't limited to a BC's battalion.`)}
+   ${card('8 · Built on First Due',`MFD's daily schedule lives in <b>First Due</b> (the same system the policy names for county-wide notifications). This tool reads the holes First Due surfaces — the VAC / SL / FL absences — and fills them fairly. It complements the system of record; it doesn't replace it.`)}
+  </div>
+  <p class="note" style="margin-top:16px">Demo prototype on anonymized data. The rules above mirror the County of Maui Rank-for-Rank Recall Program effective November 1, 2025; the equity-first ordering is the recommended improvement on the policy's first-come default.</p>`;
+}
+
 /* ---------- FF: My Recall ---------- */
 function viewHome(){
   const m=curMember(); const pct=Math.round(m.fyHours/FY_CAP*100);
@@ -904,6 +936,8 @@ document.addEventListener('click',e=>{
   else if(a==='csvAssign'){csvAssign();}
   else if(a==='csvAudit'){csvAudit();}
   else if(a==='dismissintro'){state.introDismissed=true;save();render();}
+  else if(a==='how'){state.view='how';render();}
+  else if(a==='print'){window.print();}
 });
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&state.modal){state.modal=null;render();}});
 $('#roleSel').addEventListener('change',e=>{state.role=e.target.value;state.view=null;render();});
