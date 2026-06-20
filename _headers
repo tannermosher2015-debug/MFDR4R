@@ -2,3 +2,5 @@
   X-Robots-Tag: noindex, nofollow
   Referrer-Policy: strict-origin-when-cross-origin
   X-Content-Type-Options: nosniff
+  X-Frame-Options: SAMEORIGIN
+  Permissions-Policy: geolocation=(), camera=(), microphone=()

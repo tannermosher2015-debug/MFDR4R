@@ -41,9 +41,9 @@
   --bg:#0c121b; --surface:#152030; --surface-2:#1a273a; --surface-3:#20304a;
   --border:#2a3b54; --border-strong:#3a5172;
   --text:#e9eff6; --muted:#9fb1c6; --faint:#7d8fa0;
-  --accent:#5b8cff; --accent-text:#0b1320; --accent-weak:#1c2c47;
+  --accent:#5b8cff; --accent-text:#0b1320; --accent-weak:#16233c;
   --ok:#3fce80; --ok-bg:#15311f; --warn:#f0b13e; --warn-bg:#332611; --crit:#ff7a6b; --crit-bg:#39181a;
-  --p1:#ff6a52; --p2:#6f9bff; --p3:#4cc878;
+  /* platoon colors keep the (darker) light values in dark mode so white badge text stays AA */
   --shadow:0 1px 2px rgba(0,0,0,.3),0 6px 20px rgba(0,0,0,.35);
   --shadow-lg:0 10px 50px rgba(0,0,0,.55);
 }
@@ -73,7 +73,7 @@ header.top{position:sticky;top:0;z-index:50;background:var(--surface);border-bot
 select,input[type=text],input[type=email],input[type=date]{font-family:inherit;font-size:14px;background:var(--surface-2);color:var(--text);border:1px solid var(--border-strong);border-radius:8px;padding:7px 10px}
 .iconbtn{width:38px;height:38px;border-radius:9px;border:1px solid var(--border-strong);background:var(--surface-2);color:var(--text);display:grid;place-items:center;position:relative;font-size:16px}
 .iconbtn:hover{background:var(--surface-3)}
-.badge-count{position:absolute;top:-6px;right:-6px;background:var(--crit);color:#fff;font-size:10px;font-weight:700;min-width:18px;height:18px;border-radius:9px;display:grid;place-items:center;padding:0 4px}
+.badge-count{position:absolute;top:-6px;right:-6px;background:#bf2a1e;color:#fff;font-size:10px;font-weight:700;min-width:18px;height:18px;border-radius:9px;display:grid;place-items:center;padding:0 4px}
 .btn{border:1px solid var(--border-strong);background:var(--surface-2);color:var(--text);padding:8px 14px;border-radius:9px;font-weight:600;display:inline-flex;align-items:center;gap:7px}
 .btn:hover{background:var(--surface-3)}
 .btn.primary{background:var(--accent);color:var(--accent-text);border-color:transparent}
@@ -268,7 +268,7 @@ tbody tr:hover{background:var(--surface-2)}
   <div class="top-in">
     <div class="brand">
       <div class="mark" aria-hidden="true">MFD</div>
-      <div><div class="t">Overtime Recall System</div><div class="s">Rank-for-Rank · Maui Fire Dept · Demo</div></div>
+      <div><h1 class="t">Overtime Recall System</h1><div class="s">Rank-for-Rank · Maui Fire Dept · Demo</div></div>
     </div>
     <div class="ctl">
       <div class="field">
@@ -290,10 +290,10 @@ tbody tr:hover{background:var(--surface-2)}
 </header>
 <div class="app">
   <main id="main" tabindex="-1"></main>
-  <div class="footer">
+  <footer class="footer">
     Demo prototype · anonymized data · not connected to any live system · simulated text/email confirmations.<br>
     Built to model the County of Maui Rank-for-Rank Recall Program (eff. 11/1/2025).
-  </div>
+  </footer>
 </div>
 <div id="modalRoot"></div>
 <div id="toasts" aria-live="polite" aria-atomic="false"></div>
@@ -546,7 +546,7 @@ function fillModal(vacId){
       <div class="rank">${i+1}</div>
       <div class="who"><b>${m.id}</b><div style="font-size:11.5px;color:var(--muted)">${m.rank} · ${stById(m.homeStationId).name}</div></div>
       <div class="why">
-        ${i===0?'<span class="chip" style="background:var(--ok);color:#fff">★ Recommended</span>':''}
+        ${i===0?'<span class="chip good">★ Recommended</span>':''}
         <span class="tierbadge ${t<=2?'t'+t:''}">${TIERLBL[t]}</span>
         <span class="chip good">✓ ${v.rank}</span>
         <span class="chip good">✓ ${v.cls}-qual</span>
@@ -613,7 +613,7 @@ function viewEquity(){
 function viewRoster(){
   const ms=Object.values(state.members).sort((a,b)=>a.fyHours-b.fyHours);
   return `<div class="page-head"><div><h2>Roster</h2><p>${ms.length} ranked members · sorted by recall hours (lowest first)</p></div>
-   <span class="spacer"></span><input type="text" id="rosterQ" placeholder="Filter by ID, station, rank…" oninput="filterRoster(this.value)" style="min-width:240px"></div>
+   <span class="spacer"></span><input type="text" id="rosterQ" aria-label="Filter roster by ID, station, or rank" placeholder="Filter by ID, station, rank…" oninput="filterRoster(this.value)" style="min-width:240px"></div>
   <div class="card"><div class="bd tight"><div class="scroll"><table class="resp"><thead><tr><th>ID</th><th>Rank</th><th>Station</th><th>Plt</th><th>Qualified</th><th>Recall hrs</th><th>Status</th><th></th></tr></thead><tbody id="rosterBody">
     ${ms.map(rosterRow).join('')}
   </tbody></table></div></div></div>`;
