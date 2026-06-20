@@ -84,7 +84,7 @@ select,input[type=text],input[type=email],input[type=date]{font-family:inherit;f
 
 nav.tabs{max-width:1240px;margin:0 auto;padding:0 20px;display:flex;gap:2px;overflow-x:auto}
 nav.tabs button{background:none;border:none;border-bottom:3px solid transparent;color:var(--muted);padding:13px 14px;font-weight:600;white-space:nowrap}
-nav.tabs button[aria-current=page]{color:var(--text);border-bottom-color:var(--accent)}
+nav.tabs button[aria-selected=true]{color:var(--text);border-bottom-color:var(--accent)}
 nav.tabs button:hover{color:var(--text)}
 
 main{padding-top:24px}
@@ -286,10 +286,10 @@ tbody tr:hover{background:var(--surface-2)}
       <button class="btn sm" id="resetBtn" title="Reset the demo to its starting scenario">↺ Reset demo</button>
     </div>
   </div>
-  <nav class="tabs" id="tabs" aria-label="Sections"></nav>
+  <nav class="tabs" id="tabs" role="tablist" aria-label="Sections"></nav>
 </header>
 <div class="app">
-  <main id="main" tabindex="-1"></main>
+  <main id="main" tabindex="-1" role="tabpanel"></main>
   <footer class="footer">
     Demo prototype · anonymized data · not connected to any live system · simulated text/email confirmations.<br>
     Built to model the County of Maui Rank-for-Rank Recall Program (eff. 11/1/2025).
@@ -467,7 +467,9 @@ function render(){
   // tabs
   const items=isBC()?NAV.bc:NAV.ff;
   if(state.view!=='how' && !items.find(i=>i[0]===state.view))state.view=items[0][0];
-  $('#tabs').innerHTML=items.map(([k,l])=>`<button data-act="nav" data-v="${k}" ${k===state.view?'aria-current="page"':''}>${l}</button>`).join('');
+  const anySel=items.some(i=>i[0]===state.view);
+  $('#tabs').innerHTML=items.map(([k,l],idx)=>`<button role="tab" id="tab-${k}" data-act="nav" data-v="${k}" aria-controls="main" aria-selected="${k===state.view?'true':'false'}" tabindex="${(k===state.view||(!anySel&&idx===0))?'0':'-1'}">${l}</button>`).join('');
+  const at=items.find(i=>i[0]===state.view); if(at){$('#main').setAttribute('aria-labelledby','tab-'+at[0]);}else{$('#main').removeAttribute('aria-labelledby');}
   // bell
   const n=state.notifications.length;const bc=$('#bellCount');bc.hidden=!n;bc.textContent=n;
   // view
@@ -924,24 +926,39 @@ window.updateClassOpts=function(){const s=stById(document.querySelector('#cStati
 window.setRate=function(v){state.otRate=Math.max(0,parseFloat(v)||0);save();render();};
 
 /* ---------- modal plumbing ---------- */
-function modalShell(title,body,footer){return `<div class="scrim" data-act="scrim"><div class="modal" role="dialog" aria-modal="true" aria-label="${title}">
+let modalTrigger=null;
+function modalShell(title,body,footer){return `<div class="scrim" data-act="scrim"><div class="modal" role="dialog" aria-modal="true" aria-label="${title}" tabindex="-1">
   <div class="mh"><h3>${title}</h3><span class="spacer" style="flex:1"></span><button class="iconbtn" data-act="closemodal" aria-label="Close">✕</button></div>
   <div class="mb">${body}</div><div class="mf">${footer||''}</div></div></div>`;}
 function renderModal(){const md=state.modal;let html='';
   if(md.type==='fill')html=fillModal(md.id);
   else if(md.type==='payoff')html=payoffModal(md);
+  else if(md.type==='notif')html=notifModal();
   $('#modalRoot').innerHTML=html;
-  const f=$('#modalRoot .modal');if(f)f.querySelector('button,select,input,a')?.focus();}
+  const f=$('#modalRoot .modal');if(f)f.focus();}
+function modalFocusables(){const m=$('#modalRoot .modal');if(!m)return[];return [...m.querySelectorAll('button,select,input,a[href],[tabindex]:not([tabindex="-1"])')].filter(el=>el.offsetParent!==null);}
+function closeModal(){
+  const t=modalTrigger; modalTrigger=null;
+  // capture the trigger's identity before render() rebuilds #main and detaches it
+  const id=(t&&t.id)?('#'+t.id):null;
+  const sel=(t&&t.dataset&&t.dataset.act)?('[data-act="'+t.dataset.act+'"]'+(t.dataset.id?('[data-id="'+t.dataset.id+'"]'):'')):null;
+  state.modal=null; render();
+  let target=(t&&document.contains(t))?t:((id&&document.querySelector(id))||(sel&&document.querySelector(sel))||null);
+  try{(target||$('#main')).focus();}catch(e){}
+}
+function notifModal(){const body=state.notifications.slice(0,12).map(n=>`<div style="padding:10px 0;border-bottom:1px solid var(--border)"><div>${n.text}</div><div style="font-size:11px;color:var(--muted)">${n.ts}</div></div>`).join('');
+  return modalShell('Notifications',body||'<p>No notifications</p>',`<button class="btn ghost" data-act="clearnotif">Clear all</button><button class="btn" data-act="closemodal">Close</button>`);}
 
 /* ---------- global event delegation ---------- */
 document.addEventListener('click',e=>{
   const t=e.target.closest('[data-act]'); if(!t)return; const a=t.dataset.act;
   if(a==='nav'){state.view=t.dataset.v;render();}
-  else if(a==='fill'){state.modal={type:'fill',id:t.dataset.id};render();}
+  else if(a==='fill'){modalTrigger=t;state.modal={type:'fill',id:t.dataset.id};render();}
   else if(a==='offer'){offerRecall(t.dataset.vac,t.dataset.m);}
   else if(a==='acceptoffer'){respondOffer(t.dataset.vac,true);}
   else if(a==='declineoffer'){respondOffer(t.dataset.vac,false);}
-  else if(a==='closemodal'||a==='scrim'){if(a==='scrim'&&e.target!==t)return;state.modal=null;render();}
+  else if(a==='closemodal'||a==='scrim'){if(a==='scrim'&&e.target!==t)return;closeModal();}
+  else if(a==='clearnotif'){state.notifications=[];closeModal();}
   else if(a==='bid'){placeBid(t.dataset.id);}
   else if(a==='setavail'){setAvail(t.dataset.d,true);}
   else if(a==='unavail'){setAvail(t.dataset.d,false);}
@@ -955,17 +972,29 @@ document.addEventListener('click',e=>{
   else if(a==='how'){state.view='how';render();}
   else if(a==='print'){window.print();}
 });
-document.addEventListener('keydown',e=>{if(e.key==='Escape'&&state.modal){state.modal=null;render();}});
+document.addEventListener('keydown',e=>{
+  if(!state.modal)return;
+  if(e.key==='Escape'){e.preventDefault();closeModal();return;}
+  if(e.key==='Tab'){const f=modalFocusables();if(!f.length)return;const first=f[0],last=f[f.length-1],ae=document.activeElement;
+    if(e.shiftKey&&(ae===first||!f.includes(ae))){e.preventDefault();last.focus();}
+    else if(!e.shiftKey&&(ae===last||!f.includes(ae))){e.preventDefault();first.focus();}}
+});
+$('#tabs').addEventListener('keydown',e=>{
+  if(!['ArrowRight','ArrowLeft','Home','End'].includes(e.key))return;
+  const tabs=[...$('#tabs').querySelectorAll('[role=tab]')]; if(!tabs.length)return;
+  let i=tabs.indexOf(document.activeElement); if(i<0)i=tabs.findIndex(t=>t.getAttribute('aria-selected')==='true'); if(i<0)i=0;
+  let j=i;
+  if(e.key==='ArrowRight')j=(i+1)%tabs.length; else if(e.key==='ArrowLeft')j=(i-1+tabs.length)%tabs.length;
+  else if(e.key==='Home')j=0; else if(e.key==='End')j=tabs.length-1;
+  e.preventDefault(); const k=tabs[j].dataset.v; tabs[j].click(); const nt=document.getElementById('tab-'+k); if(nt)nt.focus();
+});
 $('#roleSel').addEventListener('change',e=>{state.role=e.target.value;state.view=null;render();});
 $('#themeBtn').addEventListener('click',()=>{state.theme=state.theme==='light'?'dark':'light';render();});
 $('#resetBtn').addEventListener('click',resetDemo);
 $('#bell').addEventListener('click',()=>{
   if(!state.notifications.length){toast('','No notifications','');return;}
-  state.modal=null;
-  alertList();
+  modalTrigger=$('#bell'); state.modal={type:'notif'}; render();
 });
-function alertList(){const body=state.notifications.slice(0,12).map(n=>`<div style="padding:10px 0;border-bottom:1px solid var(--border)"><div>${n.text}</div><div style="font-size:11px;color:var(--muted)">${n.ts}</div></div>`).join('');
-  $('#modalRoot').innerHTML=modalShell('Notifications',body||'<p>None</p>',`<button class="btn" data-act="closemodal">Close</button><button class="btn ghost" onclick="state.notifications=[];this.closest('.scrim').remove();document.getElementById('bellCount').hidden=true">Clear all</button>`);}
 
 /* ============================================================ 7. INIT */
 load();
