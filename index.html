@@ -119,9 +119,10 @@ tbody tr:hover{background:var(--surface-2)}
 .tierbadge.t2{background:var(--accent-weak);color:var(--accent);border-color:transparent}
 
 /* calendar */
-.cal{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
+.cal{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px}
 .cal .dow{font-size:11px;font-weight:700;color:var(--faint);text-transform:uppercase;text-align:center;padding:4px 0}
-.cell{min-height:78px;border:1px solid var(--border);border-radius:10px;padding:6px 7px;background:var(--surface-2);position:relative;display:flex;flex-direction:column;gap:4px}
+.cell{min-height:78px;min-width:0;border:1px solid var(--border);border-radius:10px;padding:6px 7px;background:var(--surface-2);position:relative;display:flex;flex-direction:column;gap:4px}
+.cell .ev{overflow-wrap:anywhere}
 .cell.empty{background:transparent;border:none}
 .cell .dn{font-family:var(--font-mono);font-size:13px;font-weight:600;display:flex;justify-content:space-between;align-items:center}
 .cell .od{font-size:10px;font-weight:700;color:#fff;border-radius:5px;padding:1px 6px}
@@ -180,6 +181,52 @@ tbody tr:hover{background:var(--surface-2)}
 .distrib .b{flex:1;background:var(--accent);border-radius:3px 3px 0 0;min-height:3px;opacity:.85}
 .footer{margin-top:40px;color:var(--faint);font-size:12px;text-align:center;border-top:1px solid var(--border);padding-top:18px}
 .hl{background:linear-gradient(transparent 60%,var(--accent-weak) 0)}
+
+/* ---------- mobile optimization (≤640px) ---------- */
+@media(max-width:640px){
+  .app{padding:0 12px 56px}
+  main{padding-top:18px}
+  .page-head{margin-bottom:14px}
+  .page-head h2{font-size:20px}
+  .brand .s{display:none}
+  .brand .mark{width:30px;height:30px;font-size:13px}
+  .brand .t{font-size:14px}
+  .top-in{gap:8px 10px;padding:10px 12px}
+  .ctl{gap:6px;flex-wrap:wrap;width:100%}
+  .ctl .field:first-of-type{flex:1 1 100%}
+  #roleSel{width:100%}
+  #dateLbl{font-size:12px}
+  /* any table that's still wide scrolls inside its card — never the whole page */
+  .card .bd.tight{overflow-x:auto;-webkit-overflow-scrolling:touch}
+  /* responsive tables reflow into stacked cards */
+  table.resp thead{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);border:0}
+  table.resp tbody,table.resp tr,table.resp td{display:block;width:100%}
+  table.resp tr{border:1px solid var(--border);border-radius:12px;margin:0 0 10px;background:var(--surface);overflow:hidden}
+  table.resp tr:hover{background:var(--surface)}
+  table.resp td{display:flex;justify-content:space-between;align-items:center;gap:16px;text-align:right;border:none;border-bottom:1px solid var(--border);padding:9px 14px;min-height:42px}
+  table.resp td:last-child{border-bottom:none}
+  table.resp td::before{content:attr(data-label);font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--faint);font-weight:700;text-align:left;flex:0 0 auto}
+  table.resp td.act{padding:10px 12px}
+  table.resp td.act::before{display:none}
+  table.resp td.act .btn{width:100%;justify-content:center;min-height:44px}
+  table.resp td .bar{flex:1;min-width:64px}
+  .scroll{max-height:72vh}
+  /* fill-modal candidate rows stack cleanly */
+  .cand{flex-wrap:wrap;gap:8px 10px}
+  .cand .who{min-width:0;flex:1}
+  .cand .hrs{min-width:0;text-align:right}
+  .cand .why{flex-basis:100%;order:10}
+  .cand > .btn{flex-basis:100%;order:11;width:100%;justify-content:center;min-height:44px}
+  .modal .mb{padding:16px}
+  .modal .mh,.modal .mf{padding-left:16px;padding-right:16px}
+  .legend{gap:10px}
+  /* dense month calendar fits 7 columns on a phone */
+  .cal{gap:4px}
+  .cell{min-height:60px;padding:5px 4px;gap:3px}
+  .cell .dn{font-size:12px}
+  .cell .od{font-size:9px;padding:1px 4px}
+  .cell .ev{font-size:9px;padding:2px 4px;line-height:1.15}
+}
 </style>
 </head>
 <body>
@@ -402,20 +449,20 @@ function viewCmd(){
     ${statCard('Members under 50%',Object.values(state.members).filter(m=>m.fyHours<FY_CAP*.5).length,'priority for equity','')}
   </div>
   <div class="card"><div class="hd"><h3>Vacancies needing a fill — today</h3><span class="spacer"></span><span class="pill warn">Unscheduled · 30-min window</span></div>
-  <div class="bd tight">${today.length?`<table><thead><tr><th>Station</th><th>Apparatus</th><th>Shift</th><th>Reason</th><th>Status</th><th></th></tr></thead><tbody>
+  <div class="bd tight">${today.length?`<table class="resp"><thead><tr><th>Station</th><th>Apparatus</th><th>Shift</th><th>Reason</th><th>Status</th><th></th></tr></thead><tbody>
     ${today.map(v=>{const st=stById(v.stationId);return `<tr>
-      <td><b>${st.name}</b><div style="font-size:11.5px;color:var(--muted)">${st.island}${st.remote?' · Remote 72':''}</div></td>
-      <td><b>${v.rank}</b> · ${v.cls}</td><td class="mono">${segLabel(v.segment)} <span style="color:var(--muted)">(${v.hours}h)</span></td>
-      <td>${reasonLbl(v.reason)}</td>
-      <td>${v.wouldHoldBack?'<span class="pill crit">Hold-back risk</span>':'<span class="pill warn">'+ratioStr(v)+' · short '+v.shortBy+'</span>'}</td>
-      <td style="text-align:right"><button class="btn primary sm" data-act="fill" data-id="${v.id}">Fill fairly →</button></td></tr>`;}).join('')}
+      <td data-label="Station"><b>${st.name}</b><div style="font-size:11.5px;color:var(--muted)">${st.island}${st.remote?' · Remote 72':''}</div></td>
+      <td data-label="Apparatus"><b>${v.rank}</b> · ${v.cls}</td><td data-label="Shift" class="mono">${segLabel(v.segment)} <span style="color:var(--muted)">(${v.hours}h)</span></td>
+      <td data-label="Reason">${reasonLbl(v.reason)}</td>
+      <td data-label="Status">${v.wouldHoldBack?'<span class="pill crit">Hold-back risk</span>':'<span class="pill warn">'+ratioStr(v)+' · short '+v.shortBy+'</span>'}</td>
+      <td class="act" style="text-align:right"><button class="btn primary sm" data-act="fill" data-id="${v.id}">Fill fairly →</button></td></tr>`;}).join('')}
     </tbody></table>`:`<div class="bd"><span class="pill ok">All companies at staffing</span></div>`}</div></div>
   <div style="height:16px"></div>
   <div class="card"><div class="hd"><h3>Upcoming scheduled openings</h3><span class="spacer"></span><span class="pill accent">Advance · 48-hr bid</span></div>
-  <div class="bd tight"><table><thead><tr><th>Date</th><th>Station</th><th>Apparatus</th><th>Shift</th><th>Bids</th><th></th></tr></thead><tbody>
-   ${sched.map(v=>{const st=stById(v.stationId);return `<tr><td class="mono">${fmtShort(v.date)}</td><td><b>${st.name}</b></td><td><b>${v.rank}</b> · ${v.cls}</td><td class="mono">${segLabel(v.segment)}</td>
-     <td>${v.bids.length?`<span class="pill accent">${v.bids.length} bid${v.bids.length>1?'s':''}</span>`:'<span class="pill muted">none yet</span>'}</td>
-     <td style="text-align:right"><button class="btn sm" data-act="fill" data-id="${v.id}">Review & assign</button></td></tr>`;}).join('')}
+  <div class="bd tight"><table class="resp"><thead><tr><th>Date</th><th>Station</th><th>Apparatus</th><th>Shift</th><th>Bids</th><th></th></tr></thead><tbody>
+   ${sched.map(v=>{const st=stById(v.stationId);return `<tr><td data-label="Date" class="mono">${fmtShort(v.date)}</td><td data-label="Station"><b>${st.name}</b></td><td data-label="Apparatus"><b>${v.rank}</b> · ${v.cls}</td><td data-label="Shift" class="mono">${segLabel(v.segment)}</td>
+     <td data-label="Bids">${v.bids.length?`<span class="pill accent">${v.bids.length} bid${v.bids.length>1?'s':''}</span>`:'<span class="pill muted">none yet</span>'}</td>
+     <td class="act" style="text-align:right"><button class="btn sm" data-act="fill" data-id="${v.id}">Review & assign</button></td></tr>`;}).join('')}
   </tbody></table></div></div>`;
 }
 function statCard(k,v,sub,tone){return `<div class="card stat"><div class="k">${k}</div><div class="v" ${tone?`style="color:var(--${tone})"`:''}>${v}</div><div class="sub">${sub}</div></div>`;}
@@ -500,18 +547,18 @@ function viewRoster(){
   const ms=Object.values(state.members).sort((a,b)=>a.fyHours-b.fyHours);
   return `<div class="page-head"><div><h2>Roster</h2><p>${ms.length} ranked members · sorted by recall hours (lowest first)</p></div>
    <span class="spacer"></span><input type="text" id="rosterQ" placeholder="Filter by ID, station, rank…" oninput="filterRoster(this.value)" style="min-width:240px"></div>
-  <div class="card"><div class="bd tight"><div class="scroll"><table><thead><tr><th>ID</th><th>Rank</th><th>Station</th><th>Plt</th><th>Qualified</th><th>Recall hrs</th><th>Status</th><th></th></tr></thead><tbody id="rosterBody">
+  <div class="card"><div class="bd tight"><div class="scroll"><table class="resp"><thead><tr><th>ID</th><th>Rank</th><th>Station</th><th>Plt</th><th>Qualified</th><th>Recall hrs</th><th>Status</th><th></th></tr></thead><tbody id="rosterBody">
     ${ms.map(rosterRow).join('')}
   </tbody></table></div></div></div>`;
 }
 function rosterRow(m){const susp=m.suspendedUntil&&m.suspendedUntil>=state.demoDate;
   return `<tr data-q="${(m.id+' '+m.rank+' '+stById(m.homeStationId).name+' '+m.platoon).toLowerCase()}">
-   <td><b class="mono">${m.id}</b></td><td>${m.rank}</td><td>${stById(m.homeStationId).name}</td>
-   <td><span class="ptag ${m.platoon}">${m.platoon}</span></td>
-   <td style="font-size:12px;color:var(--muted)">${m.qualifiedClasses.join(', ')}</td>
-   <td style="min-width:150px">${hoursBar(m.fyHours)}<span class="mono" style="font-size:11px">${m.fyHours}/${FY_CAP}h${m.holdBackHours?' (+'+m.holdBackHours+' HB)':''}</span></td>
-   <td>${susp?'<span class="pill crit">Suspended</span>':'<span class="pill ok">Eligible</span>'}</td>
-   <td style="text-align:right"><button class="btn sm" data-act="suspend" data-m="${m.id}">${susp?'Reinstate':'Suspend'}</button></td></tr>`;}
+   <td data-label="ID"><b class="mono">${m.id}</b></td><td data-label="Rank">${m.rank}</td><td data-label="Station">${stById(m.homeStationId).name}</td>
+   <td data-label="Platoon"><span class="ptag ${m.platoon}">${m.platoon}</span></td>
+   <td data-label="Qualified" style="font-size:12px;color:var(--muted)">${m.qualifiedClasses.join(', ')}</td>
+   <td data-label="Recall hrs" style="min-width:150px">${hoursBar(m.fyHours)}<span class="mono" style="font-size:11px">${m.fyHours}/${FY_CAP}h${m.holdBackHours?' (+'+m.holdBackHours+' HB)':''}</span></td>
+   <td data-label="Status">${susp?'<span class="pill crit">Suspended</span>':'<span class="pill ok">Eligible</span>'}</td>
+   <td class="act" style="text-align:right"><button class="btn sm" data-act="suspend" data-m="${m.id}">${susp?'Reinstate':'Suspend'}</button></td></tr>`;}
 
 /* ---------- BC: Create opportunity ---------- */
 function viewCreate(){
