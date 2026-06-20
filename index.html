@@ -181,6 +181,11 @@ tbody tr:hover{background:var(--surface-2)}
 .distrib .b{flex:1;background:var(--accent);border-radius:3px 3px 0 0;min-height:3px;opacity:.85}
 .footer{margin-top:40px;color:var(--faint);font-size:12px;text-align:center;border-top:1px solid var(--border);padding-top:18px}
 .hl{background:linear-gradient(transparent 60%,var(--accent-weak) 0)}
+.intro{display:flex;gap:13px;align-items:flex-start;background:var(--accent-weak);border:1px solid var(--accent);border-radius:12px;padding:13px 15px;margin-bottom:18px}
+.intro .ico{flex:none;width:26px;height:26px;border-radius:8px;background:var(--accent);color:var(--accent-text);display:grid;place-items:center;font-weight:800;font-style:italic;font-family:var(--font-mono)}
+.intro .tx{font-size:13px;line-height:1.5;color:var(--text)}
+.intro .x{flex:none;margin-left:6px;background:none;border:none;color:var(--muted);font-size:14px;line-height:1;padding:4px 7px;border-radius:7px;align-self:flex-start}
+.intro .x:hover{background:var(--surface);color:var(--text)}
 
 /* ---------- mobile optimization (≤640px) ---------- */
 @media(max-width:640px){
@@ -369,7 +374,7 @@ function buildSeed(){
 const LS='mfd-ot-recall-v2';
 let state;
 function freshState(){const seed=buildSeed();return{role:'bc',theme:'light',demoDate:DEMO_DATE,view:null,
-  members:seed.members,vacancies:seed.vacancies,availability:{},notifications:[],modal:null};}
+  members:seed.members,vacancies:seed.vacancies,availability:{},notifications:[],introDismissed:false,modal:null};}
 function load(){try{const r=localStorage.getItem(LS);if(r){state=JSON.parse(r);state.modal=null;return;}}catch(e){}state=freshState();}
 function save(){try{const{modal,...rest}=state;localStorage.setItem(LS,JSON.stringify(rest));}catch(e){}}
 function resetDemo(){state=freshState();save();render();toast('ok','Demo reset','Back to the June 19 sick-call scenario.');}
@@ -442,6 +447,7 @@ function viewCmd(){
   const sched=open.filter(v=>v.date>state.demoDate);
   const filledToday=state.vacancies.filter(v=>v.assigneeId&&v.date===state.demoDate).length;
   return `<div class="page-head"><div><h2>Command Center</h2><p>${fmt(state.demoDate)} · ${onDutyPlatoon(state.demoDate)===null?'':PLATOON[onDutyPlatoon(state.demoDate)].name} on duty</p></div></div>
+  ${state.introDismissed?'':introCallout()}
   <div class="grid cols-4" style="margin-bottom:18px">
     ${statCard('Open today',today.length,today.some(v=>v.wouldHoldBack)?'⚠ '+today.filter(v=>v.wouldHoldBack).length+' would force a hold-back':(today.length?'needs filling':'all companies staffed'),today.length?(today.some(v=>v.wouldHoldBack)?'crit':'warn'):'ok')}
     ${statCard('Filled today',filledToday,'via recall','ok')}
@@ -466,6 +472,11 @@ function viewCmd(){
   </tbody></table></div></div>`;
 }
 function statCard(k,v,sub,tone){return `<div class="card stat"><div class="k">${k}</div><div class="v" ${tone?`style="color:var(--${tone})"`:''}>${v}</div><div class="sub">${sub}</div></div>`;}
+function introCallout(){return `<div class="intro" role="note">
+  <div class="ico" aria-hidden="true">i</div>
+  <div class="tx">Each row below is a vacancy on today's shift. A red <b>Hold-back risk</b> flag means a station is short and someone would be stuck holding over to cover it. Click <b>Fill fairly →</b> and the system instantly ranks every eligible counterpart county-wide by who's worked the <b>least</b> overtime — pick one and they're recalled. Fair, fast, nobody stuck.</div>
+  <button class="x" data-act="dismissintro" aria-label="Dismiss this tip">✕</button>
+</div>`;}
 function segLabel(s){return s==='full24'?'24-hour (0730–0730)':s;}
 
 /* ---------- BC: Fill flow (the hero) ---------- */
@@ -783,6 +794,7 @@ document.addEventListener('click',e=>{
   else if(a==='createvac'){createVac();}
   else if(a==='csvHours'){csvHours();}
   else if(a==='csvAssign'){csvAssign();}
+  else if(a==='dismissintro'){state.introDismissed=true;save();render();}
 });
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&state.modal){state.modal=null;render();}});
 $('#roleSel').addEventListener('change',e=>{state.role=e.target.value;state.view=null;render();});
