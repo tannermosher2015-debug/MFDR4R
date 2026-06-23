@@ -189,6 +189,20 @@ tbody tr:hover{background:var(--surface-2)}
 .toast b{display:block;margin-bottom:2px}
 @keyframes slidein{from{transform:translateY(8px);opacity:0}to{transform:none;opacity:1}}
 
+/* guided tour */
+.tour-block{position:fixed;inset:0;z-index:479}/* transparent click-guard so the tour drives itself */
+.tour-backdrop{position:fixed;inset:0;background:rgba(8,16,28,.62);z-index:480}
+.tour-spot{position:fixed;border-radius:11px;box-shadow:0 0 0 9999px rgba(8,16,28,.62),0 0 0 3px var(--accent);z-index:481;transition:all .25s ease;pointer-events:none}
+.tour-card{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);z-index:500;width:min(580px,calc(100% - 28px));background:var(--surface);border:1px solid var(--border);border-radius:16px;box-shadow:var(--shadow-lg);padding:18px 22px;animation:slidein .25s ease}
+.tour-card .tour-step{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--accent)}
+.tour-card h3{font-size:18px;margin:4px 0 8px}
+.tour-card p{margin:0;font-size:14px;line-height:1.55;color:var(--text)}
+.tour-card .tour-nav{display:flex;align-items:center;gap:8px;margin-top:16px}
+.tour-dots{display:flex;gap:5px}
+.tour-dots i{width:7px;height:7px;border-radius:50%;background:var(--border-strong);display:block}
+.tour-dots i.on{background:var(--accent)}
+@media(max-width:600px){.tour-card{bottom:12px;padding:15px 16px}.tour-card h3{font-size:16px}}
+
 .kv{display:grid;grid-template-columns:auto 1fr;gap:6px 16px;font-size:13.5px}
 .kv dt{color:var(--muted)} .kv dd{margin:0;font-weight:600}
 .note{background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:12px 14px;font-size:13px;color:var(--muted)}
@@ -289,6 +303,7 @@ main.enter{animation:viewenter .28s cubic-bezier(.22,.61,.36,1)}
         <div id="dateLbl" class="mono" style="padding:7px 10px;border:1px solid var(--border);border-radius:8px;background:var(--surface-2);font-size:13px"></div>
       </div>
       <button class="iconbtn" id="bell" aria-label="Notifications" title="Notifications">🔔<span class="badge-count" id="bellCount" hidden>0</span></button>
+      <button class="btn sm primary" data-act="tour" title="A guided walkthrough of the whole system">▶ Guided tour</button>
       <button class="btn sm" data-act="how" title="How the system decides every recall">How it works</button>
       <button class="iconbtn" data-act="print" aria-label="Print or save as PDF" title="Print / Save as PDF">⎙</button>
       <button class="iconbtn" id="themeBtn" aria-label="Toggle light/dark theme" title="Toggle theme">◐</button>
@@ -305,6 +320,7 @@ main.enter{animation:viewenter .28s cubic-bezier(.22,.61,.36,1)}
   </footer>
 </div>
 <div id="modalRoot"></div>
+<div id="tourRoot"></div>
 <div id="toasts" aria-live="polite" aria-atomic="false"></div>
 
 <script>
@@ -446,9 +462,9 @@ function seedLog(){return [
 ];}
 function freshState(){const seed=buildSeed();return{role:'bc1',theme:'light',mode:'equity',demoDate:DEMO_DATE,view:null,
   members:seed.members,vacancies:seed.vacancies,availability:{},notifications:[],introDismissed:false,
-  otRate:55,log:seedLog(),modal:null};}
-function load(){try{const r=localStorage.getItem(LS);if(r){state=JSON.parse(r);state.modal=null;if(!state.mode)state.mode='equity';return;}}catch(e){}state=freshState();}
-function save(){try{const{modal,...rest}=state;localStorage.setItem(LS,JSON.stringify(rest));}catch(e){}}
+  otRate:55,log:seedLog(),modal:null,tour:null};}
+function load(){try{const r=localStorage.getItem(LS);if(r){state=JSON.parse(r);state.modal=null;state.tour=null;if(!state.mode)state.mode='equity';return;}}catch(e){}state=freshState();}
+function save(){try{const{modal,tour,...rest}=state;localStorage.setItem(LS,JSON.stringify(rest));}catch(e){}}
 function resetDemo(){state=freshState();save();render();toast('ok','Demo reset','Back to the June 19 sick-call scenario.');}
 
 /* ============================================================ 4. EQUITY ENGINE */
@@ -523,6 +539,7 @@ function render(){
   root.innerHTML=(V[state.view]||(()=>'<p>Not found</p>'))();
   if(state.view!==_lastView){_lastView=state.view;root.classList.remove('enter');void root.offsetWidth;root.classList.add('enter');} // one-shot entrance only when the view actually changes
   if(state.modal)renderModal();else $('#modalRoot').innerHTML='';
+  renderTour();
   save();
 }
 
@@ -578,7 +595,7 @@ function viewCmd(){
 function statCard(k,v,sub,tone){return `<div class="card stat"><div class="k">${k}</div><div class="v" ${tone?`style="color:var(--${tone})"`:''}>${v}</div><div class="sub">${sub}</div></div>`;}
 function introCallout(){return `<div class="intro" role="note">
   <div class="ico" aria-hidden="true">i</div>
-  <div class="tx">Each row below is a vacancy on today's shift. A red <b>Hold-back risk</b> flag means a station is short and someone would be stuck holding over to cover it. Click <b>Fill fairly →</b> and the system instantly ranks every eligible counterpart county-wide by who's worked the <b>least</b> overtime. <b>Offer</b> the recommended one — they accept, and they're recalled. Every step is logged (see <b>Audit Log</b>). Fair, fast, nobody stuck.</div>
+  <div class="tx">Each row below is a vacancy on today's shift. A red <b>Hold-back risk</b> flag means a station is short and someone would be stuck holding over to cover it. Click <b>Fill fairly →</b> and the system instantly ranks every eligible counterpart county-wide by who's worked the <b>least</b> overtime. <b>Offer</b> the recommended one — they accept, and they're recalled. Every step is logged (see <b>Audit Log</b>). Fair, fast, nobody stuck.<div style="margin-top:9px"><button class="btn sm primary" data-act="tour">▶ Take the guided tour</button></div></div>
   <button class="x" data-act="dismissintro" aria-label="Dismiss this tip">✕</button>
 </div>`;}
 function segLabel(s){return s==='full24'?'24-hour (0730–0730)':s;}
@@ -1153,6 +1170,80 @@ function closeModal(){
 function notifModal(){const body=state.notifications.slice(0,12).map(n=>`<div style="padding:10px 0;border-bottom:1px solid var(--border)"><div>${n.text}</div><div style="font-size:11px;color:var(--muted)">${n.ts}</div></div>`).join('');
   return modalShell('Notifications',body||'<p>No notifications</p>',`<button class="btn ghost" data-act="clearnotif">Clear all</button><button class="btn" data-act="closemodal">Close</button>`);}
 
+/* ---------- guided tour ("walk the Chief through it") ---------- */
+const TOUR=[
+ {view:'cmd',mode:'equity',role:'bc1',sel:null,
+  title:'A working tool for the policy you signed',
+  body:'This is the Maui Rank-for-Rank Recall System — it fills a vacancy fairly, county-wide, in seconds, and logs every step. I’ll walk you through one real morning. Use <b>Next</b> to advance (or ← → ; <b>Esc</b> to exit).'},
+ {view:'cmd',mode:'equity',role:'bc1',sel:'[data-act="fill"][data-id="v-hero"]',
+  title:'The problem, today',
+  body:'Kīhei is short one Fire Fighter and no one at the station can backfill. Done manually, an off-going firefighter gets <b>held back</b> to hold staffing — and those hours don’t even count toward their recall. This is the gap the program is meant to close.'},
+ {view:'cmd',mode:'firstcome',role:'bc1',sel:'.seg',
+  title:'How the policy assigns it',
+  body:'Policy <b>§VI</b> fills county-wide on a <b>first-come, first-serve</b> basis. I’ve set the system to mirror that as written — watch who it recommends next.'},
+ {view:'cmd',mode:'firstcome',role:'bc1',modal:{type:'fill',id:'v-hero'},sel:'.cand.top',
+  title:'First-come picks the usual taker',
+  body:'First-come surfaces <b>FF-1075 — already at 240 of 288 hours.</b> The overtime keeps piling on whoever answers first. Notice the system already tells you who equity would pick instead.'},
+ {view:'cmd',mode:'equity',role:'bc1',modal:{type:'fill',id:'v-hero'},sel:'.cand.top',
+  title:'Equity-first picks fairly',
+  body:'Same eligible pool, same rules — but the offer now goes to <b>FF-1042, the lowest-hours counterpart at 24 hours.</b> This is the program’s own stated <b>Purpose</b>: equitable distribution of overtime.'},
+ {view:'audit',mode:'equity',role:'bc1',sel:null,
+  title:'Every step is on the record',
+  body:'Each offer, accept, decline and assignment is logged with the reason and which order was used — your defense in a grievance, and the export for the <b>annual Union review the CBA §27-A requires.</b>'},
+ {view:'equity',mode:'equity',role:'bc1',sel:'#projCard',run:()=>runProjection(),
+  title:'A full year, two ways',
+  body:'The same overtime over a fiscal year: first-come buries dozens of members at the cap while dozens get almost none. Equity-first keeps everyone within a single shift of each other — <b>same dollars, fairly shared.</b>'},
+ {view:'cost',mode:'equity',role:'bc1',sel:null,
+  title:'The budget case',
+  body:'In real BU 11 wages: recall spend, the <b>hold-back tax</b>, and how concentrated the overtime is. Fair distribution isn’t only morale — it’s cost control and reliability.'},
+ {view:'how',mode:'equity',role:'bc1',sel:null,
+  title:'Grounded in your documents',
+  body:'Every rule here is cited to the <b>Rank-for-Rank Recall Program (eff. 11/1/2025)</b> and <b>CBA §27-A</b>. This isn’t a new policy — it’s the tool that delivers the one you already signed.'}
+];
+function tourStart(){tourGo(0);}
+function tourGo(n){
+  if(n<0)n=0;
+  if(n>=TOUR.length){tourEnd();return;}
+  const s=TOUR[n];
+  state.tour={active:true,step:n};
+  if(s.role)state.role=s.role;
+  if(s.mode)state.mode=s.mode;
+  if(s.view)state.view=s.view;
+  state.modal=s.modal?{type:s.modal.type,id:s.modal.id}:null;
+  render();                       // builds the view + modal, then renderTour() positions the spotlight
+  if(s.run){try{s.run();}catch(e){}}
+}
+function tourEnd(){const was=state.tour&&state.tour.active;state.tour=null;state.modal=null;render();
+  if(was)toast('ok','Tour complete','Explore freely — switch roles, flip the recall order, run the projection.');}
+function renderTour(){
+  const t=state.tour, root=$('#tourRoot');
+  if(!t||!t.active){root.innerHTML='';return;}
+  const s=TOUR[t.step];
+  let layer=`<div class="tour-backdrop"></div>`;
+  const target=s.sel?document.querySelector(s.sel):null;
+  if(target){
+    try{target.scrollIntoView({block:'center',inline:'center'});}catch(e){}
+    const r=target.getBoundingClientRect(), pad=6;
+    if(r.width&&r.height) layer=`<div class="tour-block"></div><div class="tour-spot" style="top:${Math.max(4,r.top-pad)}px;left:${Math.max(4,r.left-pad)}px;width:${r.width+pad*2}px;height:${r.height+pad*2}px"></div>`;
+  }
+  const first=t.step===0, last=t.step===TOUR.length-1;
+  const dots=TOUR.map((_,i)=>`<i class="${i===t.step?'on':''}"></i>`).join('');
+  root.innerHTML=`${layer}
+   <div class="tour-card" role="dialog" aria-modal="true" aria-label="Guided tour, step ${t.step+1} of ${TOUR.length}">
+     <div class="tour-step">Guided tour · step ${t.step+1} of ${TOUR.length}</div>
+     <h3>${s.title}</h3>
+     <p>${s.body}</p>
+     <div class="tour-nav">
+       <button class="btn ghost sm" data-act="tourend">Skip</button>
+       <span class="tour-dots" aria-hidden="true">${dots}</span>
+       <span style="flex:1"></span>
+       ${first?'':'<button class="btn sm" data-act="tourback">← Back</button>'}
+       <button class="btn primary sm" data-act="tournext">${last?'Finish ✓':'Next →'}</button>
+     </div>
+   </div>`;
+  const nx=root.querySelector('[data-act="tournext"]'); if(nx)nx.focus();
+}
+
 /* ---------- global event delegation ---------- */
 document.addEventListener('click',e=>{
   const t=e.target.closest('[data-act]'); if(!t)return; const a=t.dataset.act;
@@ -1178,9 +1269,19 @@ document.addEventListener('click',e=>{
   else if(a==='runproj'){runProjection();}
   else if(a==='dismissintro'){state.introDismissed=true;save();render();}
   else if(a==='how'){state.view='how';render();}
+  else if(a==='tour'){tourStart();}
+  else if(a==='tournext'){tourGo((state.tour?state.tour.step:0)+1);}
+  else if(a==='tourback'){tourGo((state.tour?state.tour.step:0)-1);}
+  else if(a==='tourend'){tourEnd();}
   else if(a==='print'){window.print();}
 });
 document.addEventListener('keydown',e=>{
+  if(state.tour&&state.tour.active){
+    if(e.key==='Escape'){e.preventDefault();tourEnd();return;}
+    if(e.key==='ArrowRight'){e.preventDefault();tourGo(state.tour.step+1);return;}
+    if(e.key==='ArrowLeft'){e.preventDefault();tourGo(state.tour.step-1);return;}
+    if(e.key==='Tab')return; // let focus stay on the tour card; skip the modal trap
+  }
   if(!state.modal)return;
   if(e.key==='Escape'){e.preventDefault();closeModal();return;}
   if(e.key==='Tab'){const f=modalFocusables();if(!f.length)return;const first=f[0],last=f[f.length-1],ae=document.activeElement;
