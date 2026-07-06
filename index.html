@@ -450,7 +450,28 @@ function buildSeed(){
   ];
   // stamp the 30-minute notify window + interest pool on the same-day (unscheduled) openings
   vacancies.forEach(v=>{if(v.type==='unscheduled'){v.postedAt=Date.now();v.windowMins=30;v.interested=[];}});
-  return {members,vacancies:[...vacancies,...genForecast()]};
+  return {members,vacancies:[...vacancies,...seedBiddable(members,vacancies),...genForecast()]};
+}
+// Give the featured demo members (the role switcher) openings they can actually bid: matched to each
+// member's own rank + Engine and placed on THEIR eligible 4-day-off days, so the bid calendar shows
+// fills that line up with the member instead of all-locked rows. Ordered before genForecast so these
+// win the calendar's one-per-day lookup on shared days.
+function seedBiddable(members,existing){
+  const feat=['FF-1042','FF-1200','FF-1250'];
+  const taken=new Set(existing.filter(v=>v.type==='scheduled').map(v=>v.date)); // don't shadow the hand-authored openings
+  const reasons=['VAC','FL','SA']; const out=[];
+  feat.forEach((id,fi)=>{const m=members[id]; if(!m)return; let n=0;
+    for(let d=8; d<=30 && n<4; d++){ const ds=`2026-06-${String(d).padStart(2,'0')}`;
+      if(ds===DEMO_DATE||taken.has(ds)) continue;
+      if(isOnDuty(m,ds)||!inFourDayOff(m,ds)||adjacentOnDuty(m,ds)) continue; // must be an eligible bid day for this member
+      taken.add(ds);
+      const st=STATIONS[(fi*4+n)%STATIONS.length];
+      out.push({id:`b-${id}-${n}`,stationId:st.id,cls:'Engine',rank:m.rank,date:ds,segment:'full24',hours:24,
+        type:'scheduled',status:'open',reason:reasons[n%3],shortBy:1,assigneeId:null,bids:[]});
+      n++;
+    }
+  });
+  return out;
 }
 // Deterministic look-ahead: scatters 1-2 scheduled coverage gaps per day across ~5 weeks
 // (real stations/ranks/apparatus, scheduled reasons only, Engine-heavy so counterparts exist).
@@ -477,7 +498,7 @@ function genForecast(){
 }
 
 /* ============================================================ 3. STATE STORE */
-const LS='mfd-ot-recall-v7';
+const LS='mfd-ot-recall-v8';
 let state;
 function seedLog(){return [
   {t:'07:42',type:'assign',by:'BC 1',memberId:'FF-1067',station:'Kahului',rank:'FF I',cls:'Engine',note:'Accepted advance bid (VAC) — recommended #1'},
