@@ -448,9 +448,25 @@ function buildSeed(){
     {id:'v5',stationId:'s11',cls:'Engine',rank:'FF III',date:'2026-06-23',segment:'full24',hours:24,type:'scheduled',status:'open',reason:'VAC',shortBy:1,assigneeId:null,bids:[]},
     {id:'v6',stationId:'s13',cls:'Tanker',rank:'FF III',date:'2026-06-20',segment:'full24',hours:24,type:'scheduled',status:'open',reason:'FL',shortBy:1,assigneeId:null,bids:[]},
   ];
-  // stamp the 30-minute notify window + interest pool on the same-day (unscheduled) openings
-  vacancies.forEach(v=>{if(v.type==='unscheduled'){v.postedAt=Date.now();v.windowMins=30;v.interested=[];}});
-  return {members,vacancies:[...vacancies,...seedBiddable(members,vacancies),...genForecast()]};
+  const all=[...vacancies,...seedBiddable(members,vacancies),...seedSameDaySick(members),...genForecast()];
+  // stamp the 30-minute notify window + interest pool on every same-day (unscheduled) opening
+  all.forEach(v=>{if(v.type==='unscheduled'){if(v.postedAt==null)v.postedAt=Date.now();v.windowMins=v.windowMins||30;if(!v.interested)v.interested=[];}});
+  return {members,vacancies:all};
+}
+// More same-day sick calls for the Recall Now demo: for each off-duty featured member, a couple of
+// unscheduled openings on the demo date, matched to their rank + Engine so they surface in Recall Now
+// (a member on duty that day can't be recalled, so they correctly get none). Hero v-hero stays as-is.
+function seedSameDaySick(members){
+  const feat=['FF-1042','FF-1200','FF-1250']; const out=[];
+  const stns=['s1','s2','s5','s7','s13','s14','s3','s11']; const reasons=['SL','SL','FL']; let k=0;
+  feat.forEach((id,fi)=>{const m=members[id]; if(!m)return;
+    if(isOnDuty(m,DEMO_DATE)||!inFourDayOff(m,DEMO_DATE)||adjacentOnDuty(m,DEMO_DATE)) return; // must be off + in-window to take a same-day recall
+    for(let j=0;j<2;j++){ const st=stById(stns[k%stns.length]); k++;
+      out.push({id:`sd-${id}-${j}`,stationId:st.id,cls:'Engine',rank:m.rank,date:DEMO_DATE,segment:'full24',hours:24,
+        type:'unscheduled',status:'open',reason:reasons[(fi+j)%3],shortBy:1,wouldHoldBack:j===0,assigneeId:null,bids:[]});
+    }
+  });
+  return out;
 }
 // Give the featured demo members (the role switcher) openings they can actually bid: matched to each
 // member's own rank + Engine and placed on THEIR eligible 4-day-off days, so the bid calendar shows
@@ -498,7 +514,7 @@ function genForecast(){
 }
 
 /* ============================================================ 3. STATE STORE */
-const LS='mfd-ot-recall-v8';
+const LS='mfd-ot-recall-v9';
 let state;
 function seedLog(){return [
   {t:'07:42',type:'assign',by:'BC 1',memberId:'FF-1067',station:'Kahului',rank:'FF I',cls:'Engine',note:'Accepted advance bid (VAC) — recommended #1'},
