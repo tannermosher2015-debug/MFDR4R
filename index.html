@@ -448,11 +448,34 @@ function buildSeed(){
     {id:'v5',stationId:'s11',cls:'Engine',rank:'FF III',date:'2026-06-23',segment:'full24',hours:24,type:'scheduled',status:'open',reason:'VAC',shortBy:1,assigneeId:null,bids:[]},
     {id:'v6',stationId:'s13',cls:'Tanker',rank:'FF III',date:'2026-06-20',segment:'full24',hours:24,type:'scheduled',status:'open',reason:'FL',shortBy:1,assigneeId:null,bids:[]},
   ];
-  return {members,vacancies};
+  return {members,vacancies:[...vacancies,...genForecast()]};
+}
+// Deterministic look-ahead: scatters 1-2 scheduled coverage gaps per day across ~5 weeks
+// (real stations/ranks/apparatus, scheduled reasons only, Engine-heavy so counterparts exist).
+// Same seed every load/reset, so the demo calendar is stable. Hero + v2-v7 stay untouched.
+function genForecast(){
+  const rng=mulberry32(424242); const out=[];
+  const schedReasons=['VAC','FL','SA','RELO'];
+  const rankPool=['FF I','FF I','FF II','FF III','FF III','Captain'];   // weighted to common ranks
+  const start=addDays(DEMO_DATE,2);                                     // begin after the June 19 hero window
+  for(let i=0;i<36;i++){
+    const date=addDays(start,i);
+    const n=rng()<.30?0:(rng()<.66?1:2);
+    for(let k=0;k<n;k++){
+      const st=STATIONS[Math.floor(rng()*STATIONS.length)];
+      const cls=rng()<.72?'Engine':st.companies[Math.floor(rng()*st.companies.length)].c; // Engine-heavy → always fillable
+      const twelve=rng()<.16;
+      out.push({id:`f-${date}-${k}`,stationId:st.id,cls,rank:rankPool[Math.floor(rng()*rankPool.length)],
+        date,segment:twelve?'0730-1930':'full24',hours:twelve?12:24,type:'scheduled',status:'open',
+        reason:schedReasons[Math.floor(rng()*schedReasons.length)],shortBy:1,
+        wouldHoldBack:rng()<.18,assigneeId:null,bids:[]});
+    }
+  }
+  return out;
 }
 
 /* ============================================================ 3. STATE STORE */
-const LS='mfd-ot-recall-v6';
+const LS='mfd-ot-recall-v7';
 let state;
 function seedLog(){return [
   {t:'07:42',type:'assign',by:'BC 1',memberId:'FF-1067',station:'Kahului',rank:'FF I',cls:'Engine',note:'Accepted advance bid (VAC) — recommended #1'},
@@ -462,8 +485,8 @@ function seedLog(){return [
 ];}
 function freshState(){const seed=buildSeed();return{role:'bc1',theme:'light',mode:'equity',demoDate:DEMO_DATE,view:null,
   members:seed.members,vacancies:seed.vacancies,availability:{},notifications:[],introDismissed:false,
-  otRate:55,log:seedLog(),modal:null,tour:null};}
-function load(){try{const r=localStorage.getItem(LS);if(r){state=JSON.parse(r);state.modal=null;state.tour=null;if(!state.mode)state.mode='equity';return;}}catch(e){}state=freshState();}
+  forecastRange:'week',forecastAnchor:DEMO_DATE,otRate:55,log:seedLog(),modal:null,tour:null};}
+function load(){try{const r=localStorage.getItem(LS);if(r){state=JSON.parse(r);state.modal=null;state.tour=null;if(!state.mode)state.mode='equity';if(!state.forecastRange)state.forecastRange='week';if(!state.forecastAnchor)state.forecastAnchor=DEMO_DATE;return;}}catch(e){}state=freshState();}
 function save(){try{const{modal,tour,...rest}=state;localStorage.setItem(LS,JSON.stringify(rest));}catch(e){}}
 function resetDemo(){state=freshState();save();render();toast('ok','Demo reset','Back to the June 19 sick-call scenario.');}
 
@@ -508,8 +531,8 @@ function eagerness(m){let h=0;for(const ch of m.id)h=(h*31+ch.charCodeAt(0))>>>0
 
 /* ============================================================ 5. RENDER */
 const $=s=>document.querySelector(s); const root=$('#main'); let _lastView=null;
-const NAV={bc:[['cmd','Command Center'],['cost','Cost & Coverage'],['equity','Equity Dashboard'],['audit','Audit Log'],['roster','Roster'],['create','Create Opportunity'],['reports','Reports']],
-  ff:[['home','Homepage'],['opps','Bid for Assignment'],['avail','Day-Of Availability'],['nobid','No-Bid'],['profile','User Profile']]};
+const NAV={bc:[['cmd','Command Center'],['forecast','Shortage Forecast'],['cost','Cost & Coverage'],['equity','Equity Dashboard'],['audit','Audit Log'],['roster','Roster'],['create','Create Opportunity'],['reports','Reports']],
+  ff:[['home','Homepage'],['forecast','Shortage Forecast'],['opps','Bid for Assignment'],['avail','Day-Of Availability'],['nobid','No-Bid'],['profile','User Profile']]};
 function curMember(){return isBC()?null:state.members[state.role];}
 function isBC(){return state.role==='bc1'||state.role==='bc2';}
 function curBn(){return state.role==='bc2'?'Bn 2':'Bn 1';}
@@ -534,7 +557,7 @@ function render(){
   // bell
   const n=state.notifications.length;const bc=$('#bellCount');bc.hidden=!n;bc.textContent=n;
   // view
-  const V={cmd:viewCmd,cost:viewCost,create:viewCreate,equity:viewEquity,audit:viewAudit,roster:viewRoster,reports:viewReports,how:viewHow,
+  const V={cmd:viewCmd,forecast:viewForecast,cost:viewCost,create:viewCreate,equity:viewEquity,audit:viewAudit,roster:viewRoster,reports:viewReports,how:viewHow,
            home:viewHome,opps:viewOpps,avail:viewAvail,nobid:viewNoBid,profile:viewProfile};
   root.innerHTML=(V[state.view]||(()=>'<p>Not found</p>'))();
   if(state.view!==_lastView){_lastView=state.view;root.classList.remove('enter');void root.offsetWidth;root.classList.add('enter');} // one-shot entrance only when the view actually changes
@@ -553,7 +576,8 @@ function viewCmd(){
   const myStations=STATIONS.filter(s=>s.bn===myBn);
   const open=state.vacancies.filter(v=>v.status==='open'&&mine(v));
   const today=open.filter(v=>v.date===state.demoDate);
-  const sched=open.filter(v=>v.date>state.demoDate);
+  const sched=open.filter(v=>v.date>state.demoDate).sort((a,b)=>a.date.localeCompare(b.date));
+  const schedShow=sched.slice(0,6);
   const filledToday=state.vacancies.filter(v=>v.assigneeId&&v.date===state.demoDate&&mine(v)).length;
   return `<div class="page-head"><div><h2>Command Center</h2><p>BC ${bcNum()} · ${fmt(state.demoDate)} · ${PLATOON[onDutyPlatoon(state.demoDate)].name} on duty</p></div>
    <span class="spacer"></span><span class="pill muted" title="${myStations.map(s=>s.name).join(', ')}">Overseeing ${myStations.length} stations</span></div>
@@ -587,10 +611,10 @@ function viewCmd(){
   <div style="height:16px"></div>
   <div class="card"><div class="hd"><h3>Upcoming scheduled openings</h3><span class="spacer"></span><span class="pill accent">Advance · 48-hr bid</span></div>
   <div class="bd tight"><table class="resp"><thead><tr><th>Date</th><th>Station</th><th>Apparatus</th><th>Shift</th><th>Bids</th><th></th></tr></thead><tbody>
-   ${sched.map(v=>{const st=stById(v.stationId);return `<tr><td data-label="Date" class="mono">${fmtShort(v.date)}</td><td data-label="Station"><b>${st.name}</b></td><td data-label="Apparatus"><b>${GRADE_OF_RANK[v.rank]||''} ${v.rank}</b> · ${v.cls}</td><td data-label="Shift" class="mono">${segLabel(v.segment)}</td>
+   ${schedShow.map(v=>{const st=stById(v.stationId);return `<tr><td data-label="Date" class="mono">${fmtShort(v.date)}</td><td data-label="Station"><b>${st.name}</b></td><td data-label="Apparatus"><b>${GRADE_OF_RANK[v.rank]||''} ${v.rank}</b> · ${v.cls}</td><td data-label="Shift" class="mono">${segLabel(v.segment)}</td>
      <td data-label="Bids">${v.bids.length?`<span class="pill accent">${v.bids.length} bid${v.bids.length>1?'s':''}</span>`:'<span class="pill muted">none yet</span>'}</td>
      <td class="act" style="text-align:right"><button class="btn sm" data-act="fill" data-id="${v.id}">Review & assign</button></td></tr>`;}).join('')}
-  </tbody></table></div></div>`;
+  </tbody></table>${sched.length>schedShow.length?`<div style="padding:12px 2px 2px"><button class="btn ghost sm" data-act="nav" data-v="forecast">+${sched.length-schedShow.length} more upcoming. See Shortage Forecast →</button></div>`:''}</div></div>`;
 }
 function statCard(k,v,sub,tone){return `<div class="card stat"><div class="k">${k}</div><div class="v" ${tone?`style="color:var(--${tone})"`:''}>${v}</div><div class="sub">${sub}</div></div>`;}
 function introCallout(){return `<div class="intro" role="note">
@@ -599,6 +623,99 @@ function introCallout(){return `<div class="intro" role="note">
   <button class="x" data-act="dismissintro" aria-label="Dismiss this tip">✕</button>
 </div>`;}
 function segLabel(s){return s==='full24'?'24-hour (0730–0730)':s;}
+
+/* ---------- Shortage Forecast (look-ahead) ---------- */
+function fcBounds(range,anchor){
+  if(range==='day')return{start:anchor,end:anchor};
+  if(range==='week')return{start:anchor,end:addDays(anchor,6)};
+  const d=pd(anchor),y=d.getFullYear(),mo=d.getMonth(),p=n=>String(n).padStart(2,'0');
+  const last=new Date(y,mo+1,0).getDate();
+  return{start:`${y}-${p(mo+1)}-01`,end:`${y}-${p(mo+1)}-${p(last)}`};
+}
+// scheduled-only: the forecast is what you can plan for; same-day sick calls stay in the Command Center.
+function fcOpen(b){return state.vacancies.filter(v=>v.status==='open'&&v.type==='scheduled'&&v.date>=b.start&&v.date<=b.end).sort((a,z)=>a.date.localeCompare(z.date));}
+function fcLabel(range,anchor){
+  if(range==='day')return fmt(anchor);
+  if(range==='week')return `${fmtShort(anchor)} to ${fmtShort(addDays(anchor,6))}`;
+  return pd(anchor).toLocaleDateString('en-US',{month:'long',year:'numeric'});
+}
+function fcAction(v){if(!isBC())return '';
+  return v.type==='scheduled'
+    ? `<button class="btn sm" data-act="fill" data-id="${v.id}">Review & assign</button>`
+    : `<button class="btn primary sm" data-act="fill" data-id="${v.id}">Fill fairly →</button>`;}
+function fcDay(anchor){
+  const list=fcOpen({start:anchor,end:anchor});
+  if(!list.length)return `<div class="card"><div class="bd"><span class="pill ok">No known coverage gaps on ${fmt(anchor)}. Every company is staffed.</span></div></div>`;
+  return `<div class="card"><div class="hd"><h3>${fmt(anchor)} · ${PLATOON[onDutyPlatoon(anchor)].name} on duty</h3><span class="spacer"></span><span class="pill ${list.some(v=>v.wouldHoldBack)?'crit':'warn'}">${list.length} gap${list.length>1?'s':''}</span></div>
+  <div class="bd tight"><table class="resp"><thead><tr><th>Station</th><th>Apparatus</th><th>Shift</th><th>Reason</th><th>Status</th>${isBC()?'<th></th>':''}</tr></thead><tbody>
+   ${list.map(v=>{const st=stById(v.stationId);return `<tr>
+     <td data-label="Station"><b>${st.name}</b><div style="font-size:11.5px;color:var(--muted)">${st.island}${st.remote?' · Remote 72':''}</div></td>
+     <td data-label="Apparatus"><b>${GRADE_OF_RANK[v.rank]||''} ${v.rank}</b> · ${v.cls}</td>
+     <td data-label="Shift" class="mono">${segLabel(v.segment)} <span style="color:var(--muted)">(${v.hours}h)</span></td>
+     <td data-label="Reason">${reasonLbl(v.reason)}</td>
+     <td data-label="Status">${v.wouldHoldBack?'<span class="pill crit">Hold-back risk</span>':'<span class="pill warn">'+ratioStr(v)+' · short '+v.shortBy+'</span>'}</td>
+     ${isBC()?`<td class="act" style="text-align:right">${fcAction(v)}</td>`:''}</tr>`;}).join('')}
+  </tbody></table></div></div>
+  ${isBC()?'':`<p class="note" style="margin-top:12px">Bid on any of these from <b>Bid for Assignment</b> when the date falls in your 4-day-off window.</p>`}`;
+}
+function fcWeek(anchor){
+  let cells='';
+  for(let i=0;i<7;i++){
+    const ds=addDays(anchor,i),plat=onDutyPlatoon(ds),today=ds===state.demoDate;
+    const list=fcOpen({start:ds,end:ds});
+    const dow=pd(ds).toLocaleDateString('en-US',{weekday:'short'});
+    const evs=list.map(v=>{const st=stById(v.stationId),crit=v.wouldHoldBack;
+      return `<div class="ev open" ${crit?'style="background:var(--crit-bg);color:var(--crit);border-color:var(--crit)"':''} ${isBC()?`data-act="fill" data-id="${v.id}"`:'style="cursor:default"'} title="${reasonLbl(v.reason)} · ${GRADE_OF_RANK[v.rank]||''} ${v.rank}">${st.name} · ${v.cls}</div>`;}).join('');
+    cells+=`<div class="cell ${today?'today':''}">
+      <div class="dn"><span>${dow} ${pd(ds).getDate()}</span><span class="od" style="background:${PLATOON[plat].color}">${plat}</span></div>
+      ${list.length?evs:'<div style="font-size:10px;color:var(--faint)">Staffed</div>'}</div>`;
+  }
+  return `<div class="card"><div class="hd"><h3>7-day look-ahead</h3><span class="spacer"></span><span class="pill accent">${fcLabel('week',anchor)}</span></div>
+  <div class="bd"><div class="cal">${cells}</div></div></div>
+  ${isBC()?'<p class="note" style="margin-top:12px">Click any opening to rank counterparts and fill it fairly, county-wide.</p>':''}`;
+}
+function fcMonth(anchor){
+  const d=pd(anchor),y=d.getFullYear(),mo=d.getMonth(),p=n=>String(n).padStart(2,'0');
+  const lead=new Date(y,mo,1,12).getDay(),dim=new Date(y,mo+1,0).getDate();
+  let cells='';
+  for(let i=0;i<lead;i++)cells+='<div class="cell empty"></div>';
+  for(let dd=1;dd<=dim;dd++){
+    const ds=`${y}-${p(mo+1)}-${p(dd)}`,plat=onDutyPlatoon(ds),today=ds===state.demoDate;
+    const list=fcOpen({start:ds,end:ds});
+    const dots=list.slice(0,4).map(v=>`<span class="dot" style="background:var(--${v.wouldHoldBack?'crit':'warn'})"></span>`).join('');
+    const more=list.length>4?`<span style="font-size:9px;color:var(--muted)">+${list.length-4}</span>`:'';
+    cells+=`<div class="cell ${today?'today':''}" ${list.length?`data-act="fcday" data-d="${ds}" style="cursor:pointer"`:''}>
+      <div class="dn"><span>${dd}</span><span class="od" style="background:${PLATOON[plat].color}">${plat}</span></div>
+      ${list.length?`<div style="display:flex;gap:3px;align-items:center;flex-wrap:wrap">${dots}${more}</div><div style="font-size:10px;color:var(--${list.some(v=>v.wouldHoldBack)?'crit':'muted'})">${list.length} gap${list.length>1?'s':''}</div>`:'<div style="font-size:10px;color:var(--faint)">Staffed</div>'}</div>`;
+  }
+  return `<div class="card"><div class="hd"><h3>${fcLabel('month',anchor)}</h3><span class="spacer"></span>
+    <span class="legend" style="margin:0"><span><span class="dot" style="background:var(--crit)"></span> Hold-back risk</span><span><span class="dot" style="background:var(--warn)"></span> Open gap</span></span></div>
+    <div class="bd"><div class="cal">${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(x=>`<div class="dow">${x}</div>`).join('')}${cells}</div></div></div>
+    <p class="note" style="margin-top:12px">Click any day to see and ${isBC()?'fill':'review'} its coverage gaps. Same-day sick calls are not shown here; they surface in ${isBC()?'the Command Center':'Day-Of Availability'} the morning of the shift.</p>`;
+}
+function viewForecast(){
+  const range=state.forecastRange||'week',anchor=state.forecastAnchor||state.demoDate;
+  const inRange=fcOpen(fcBounds(range,anchor));
+  const hb=inRange.filter(v=>v.wouldHoldBack).length,days=new Set(inRange.map(v=>v.date));
+  const body=range==='day'?fcDay(anchor):range==='week'?fcWeek(anchor):fcMonth(anchor);
+  const seg=r=>`<button type="button" data-act="fcrange" data-r="${r}" aria-pressed="${range===r}">${r[0].toUpperCase()+r.slice(1)}</button>`;
+  return `<div class="page-head"><div><h2>Shortage Forecast</h2><p>Scheduled coverage gaps you can plan for, county-wide. Look ahead by day, week, or month.</p></div>
+    <span class="spacer"></span>
+    <div class="seg" role="group" aria-label="Forecast range">${seg('day')}${seg('week')}${seg('month')}</div></div>
+  <div class="card" style="margin-bottom:14px"><div class="bd" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:12px 16px">
+    <button class="btn sm" data-act="fcnav" data-dir="-1" aria-label="Previous ${range}">‹ Prev</button>
+    <b style="font-size:15px;min-width:170px;text-align:center">${fcLabel(range,anchor)}</b>
+    <button class="btn sm" data-act="fcnav" data-dir="1" aria-label="Next ${range}">Next ›</button>
+    <span class="spacer"></span>
+    ${anchor!==state.demoDate?`<button class="btn ghost sm" data-act="fctoday">Back to today</button>`:''}
+  </div></div>
+  <div class="grid cols-3" style="margin-bottom:16px">
+    ${statCard('Open gaps this '+range,inRange.length,'scheduled openings','')}
+    ${statCard('Hold-back risk',hb,hb?'flagged high-priority':'none flagged',hb?'crit':'ok')}
+    ${statCard('Days affected',days.size,'with one or more gaps','')}
+  </div>
+  ${body}`;
+}
 
 /* ---------- BC: Fill flow (the hero) ---------- */
 function fillModal(vacId){
@@ -1265,6 +1382,13 @@ document.addEventListener('click',e=>{
   else if(a==='csvHours'){csvHours();}
   else if(a==='csvAssign'){csvAssign();}
   else if(a==='csvAudit'){csvAudit();}
+  else if(a==='fcrange'){state.forecastRange=t.dataset.r;render();}
+  else if(a==='fcday'){state.forecastRange='day';state.forecastAnchor=t.dataset.d;render();}
+  else if(a==='fctoday'){state.forecastAnchor=state.demoDate;render();}
+  else if(a==='fcnav'){const dir=+t.dataset.dir,r=state.forecastRange||'week';let an=state.forecastAnchor||state.demoDate;
+    if(r==='day')an=addDays(an,dir);else if(r==='week')an=addDays(an,dir*7);
+    else{const d=pd(an);d.setDate(1);d.setMonth(d.getMonth()+dir);an=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-01`;} // pin to the 1st so a 31st anchor can't overflow past a short month
+    state.forecastAnchor=an;render();}
   else if(a==='mode'){if(state.mode!==t.dataset.mode){state.mode=t.dataset.mode;save();render();toast(state.mode==='equity'?'ok':'warn',state.mode==='equity'?'Equity-first order':'First-come order (policy as written)',state.mode==='equity'?'Recall is now offered to the fewest-hours counterpart.':'Recall now goes to whoever responds first — watch the recommendation change.');}}
   else if(a==='runproj'){runProjection();}
   else if(a==='dismissintro'){state.introDismissed=true;save();render();}
@@ -1309,6 +1433,19 @@ $('#bell').addEventListener('click',()=>{
 load();
 if(!state.notifications.length){notify('Sick call at Kīhei — Engine short 1 for today\'s shift. Recall opportunity open.');}
 render();
+// ponytail: forecast self-check — run with ?selftest, results in console. No UI impact.
+if(location.search.includes('selftest')){
+  const g1=JSON.stringify(genForecast()),g2=JSON.stringify(genForecast());
+  console.assert(g1===g2,'genForecast is deterministic');
+  const gs=genForecast();
+  console.assert(gs.length&&gs.every(v=>v.date>DEMO_DATE&&v.type==='scheduled'&&v.status==='open'),'forecast entries are future scheduled openings');
+  const wb=fcBounds('week','2026-06-21');
+  console.assert(wb.start==='2026-06-21'&&wb.end==='2026-06-27','week bounds are 7 inclusive days');
+  const mb=fcBounds('month','2026-07-15');
+  console.assert(mb.start==='2026-07-01'&&mb.end==='2026-07-31','month bounds cover the whole month');
+  console.assert(fcBounds('day','2026-07-04').start===fcBounds('day','2026-07-04').end,'day bounds are a single day');
+  console.log('MFDR4R forecast self-test: assertions ran ('+gs.length+' seeded gaps)');
+}
 </script>
 </body>
 </html>
