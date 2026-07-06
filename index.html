@@ -448,6 +448,8 @@ function buildSeed(){
     {id:'v5',stationId:'s11',cls:'Engine',rank:'FF III',date:'2026-06-23',segment:'full24',hours:24,type:'scheduled',status:'open',reason:'VAC',shortBy:1,assigneeId:null,bids:[]},
     {id:'v6',stationId:'s13',cls:'Tanker',rank:'FF III',date:'2026-06-20',segment:'full24',hours:24,type:'scheduled',status:'open',reason:'FL',shortBy:1,assigneeId:null,bids:[]},
   ];
+  // stamp the 30-minute notify window + interest pool on the same-day (unscheduled) openings
+  vacancies.forEach(v=>{if(v.type==='unscheduled'){v.postedAt=Date.now();v.windowMins=30;v.interested=[];}});
   return {members,vacancies:[...vacancies,...genForecast()]};
 }
 // Deterministic look-ahead: scatters 1-2 scheduled coverage gaps per day across ~5 weeks
@@ -515,8 +517,12 @@ function eqSort(vac){return (a,b)=> a.fyHours-b.fyHours || tier(a,vac)-tier(b,va
 function rankCandidates(vac){
   const declined=new Set(vac.declined||[]);
   const list=Object.values(state.members).filter(m=>eligible(m,vac)&&!declined.has(m.id));
+  const iOrder=new Map((vac.interested||[]).map((x,i)=>[x.memberId,i])); // who notified, in notify order (earliest first)
   if(state.mode==='firstcome')
-    list.sort((a,b)=> eagerness(b)-eagerness(a) || b.fyHours-a.fyHours || a.id.localeCompare(b.id)); // §VI first-come: quickest / most frequent takers respond first
+    list.sort((a,b)=>{const ai=iOrder.has(a.id),bi=iOrder.has(b.id);         // §VI first-come: whoever notifies first is assigned first
+      if(ai&&bi)return iOrder.get(a.id)-iOrder.get(b.id);                     // both notified → earliest notify wins
+      if(ai!==bi)return ai?-1:1;                                             // a notifier outranks anyone who hasn't
+      return eagerness(b)-eagerness(a)||b.fyHours-a.fyHours||a.id.localeCompare(b.id);}); // rest: projected phone-tree order
   else
     list.sort(eqSort(vac));                                                                          // equity-first: fewest recall hours wins
   return list;
@@ -532,7 +538,7 @@ function eagerness(m){let h=0;for(const ch of m.id)h=(h*31+ch.charCodeAt(0))>>>0
 /* ============================================================ 5. RENDER */
 const $=s=>document.querySelector(s); const root=$('#main'); let _lastView=null;
 const NAV={bc:[['cmd','Command Center'],['forecast','Shortage Forecast'],['cost','Cost & Coverage'],['equity','Equity Dashboard'],['pilot','Pilot Review'],['audit','Audit Log'],['roster','Roster'],['create','Create Opportunity'],['reports','Reports']],
-  ff:[['home','Homepage'],['forecast','Shortage Forecast'],['opps','Bid for Assignment'],['avail','Day-Of Availability'],['nobid','No-Bid'],['profile','User Profile']]};
+  ff:[['home','Homepage'],['recall','Recall Now'],['forecast','Shortage Forecast'],['opps','Bid for Assignment'],['avail','Day-Of Availability'],['nobid','No-Bid'],['profile','User Profile']]};
 function curMember(){return isBC()?null:state.members[state.role];}
 function isBC(){return state.role==='bc1'||state.role==='bc2';}
 function curBn(){return state.role==='bc2'?'Bn 2':'Bn 1';}
@@ -540,6 +546,7 @@ function bcNum(){return state.role==='bc2'?'2':'1';}
 
 function render(){
   if(window.__projTimer){clearInterval(window.__projTimer);window.__projTimer=null;} // stop any in-flight projection before the DOM is rebuilt
+  if(window.__recallTimer){clearInterval(window.__recallTimer);window.__recallTimer=null;} // stop the recall countdown before rebuild
   document.documentElement.setAttribute('data-theme',state.theme);
   $('#dateLbl').textContent=fmt(state.demoDate);
   // role select
@@ -558,9 +565,10 @@ function render(){
   const n=state.notifications.length;const bc=$('#bellCount');bc.hidden=!n;bc.textContent=n;
   // view
   const V={cmd:viewCmd,forecast:viewForecast,cost:viewCost,create:viewCreate,equity:viewEquity,pilot:viewPilot,audit:viewAudit,roster:viewRoster,reports:viewReports,how:viewHow,
-           home:viewHome,opps:viewOpps,avail:viewAvail,nobid:viewNoBid,profile:viewProfile};
+           home:viewHome,recall:viewRecall,opps:viewOpps,avail:viewAvail,nobid:viewNoBid,profile:viewProfile};
   root.innerHTML=(V[state.view]||(()=>'<p>Not found</p>'))();
   if(state.view!==_lastView){_lastView=state.view;root.classList.remove('enter');void root.offsetWidth;root.classList.add('enter');} // one-shot entrance only when the view actually changes
+  if(document.querySelector('[data-countdown]'))startRecallClock(); // live 30-min notify countdown, if any are on screen
   if(state.modal)renderModal();else $('#modalRoot').innerHTML='';
   renderTour();
   save();
@@ -723,6 +731,7 @@ function fillModal(vacId){
   const cands=rankCandidates(v);
   const eqBest=equityBest(v);
   const bidSet=new Set(v.bids||[]);
+  const iMap=new Map((v.interested||[]).map(x=>[x.memberId,x.t])); // who notified availability + when
   const offer=v.offer; // {memberId} while an offer is out for response
   const rows=cands.slice(0,8).map((m,i)=>{
     const t=tier(m,v); const bid=bidSet.has(m.id);
@@ -745,6 +754,7 @@ function fillModal(vacId){
         <span class="chip good">✓ ${v.cls}-qual</span>
         <span class="chip good">✓ 4-day off · 34-hr OK</span>
         ${bid?'<span class="chip">🖐 bid</span>':''}
+        ${iMap.has(m.id)?`<span class="chip flag">✋ notified ${iMap.get(m.id)}</span>`:''}
         ${m.holdBackHours?`<span class="chip flag">held back ${m.holdBackHours}h</span>`:''}
       </div>
       <div class="hrs"><div class="big" style="color:var(--${m.fyHours<FY_CAP*.5?'ok':m.fyHours>=FY_CAP*.9?'crit':'text'})">${m.fyHours} / ${FY_CAP}h</div>
@@ -764,6 +774,7 @@ function fillModal(vacId){
     <p style="margin:0 0 14px;color:var(--muted);font-size:13px">${cands.length} eligible county-wide. Grade-for-grade (${GRADE_OF_RANK[v.rank]}↔${GRADE_OF_RANK[v.rank]}, ${v.rank}) + similar-function (${v.cls}↔${v.cls}), within 4-day off, under the 34-hr cap. ${state.mode==='firstcome'
       ? `Ordered by who responds first via First Due — which surfaces the most frequent OT-takers and concentrates hours.${eqBest?` <b style="color:var(--accent)">Equity-first would instead offer ${eqBest.id} (${eqBest.fyHours}h)</b> — the lowest-hours eligible counterpart.`:''}`
       : `<b>Offer the recommended member</b> — they accept or decline (30-min window). Offering anyone below the recommendation is logged as an override.`}</p>
+    ${(v.interested||[]).length?`<div class="note" style="border-color:var(--accent);background:var(--accent-weak);margin-bottom:12px"><b>✋ Counterparts who notified availability (30-min window):</b> ${v.interested.map(x=>`${x.memberId} · ${x.t}`).join(' &nbsp;·&nbsp; ')}. ${state.mode==='firstcome'?'First-come assigns the earliest to notify.':'Equity-first still offers the fewest-hours counterpart.'}</div>`:''}
     ${rows||`<div class="note" style="border-color:var(--crit);color:var(--crit);background:var(--crit-bg)"><b>No eligible counterpart county-wide.</b> Under the status quo, the only option left is to hold an off-going member over.<br><button class="btn crit sm" data-act="holdback" data-vac="${v.id}" style="margin-top:8px">Record forced hold-back →</button></div>`}
   `,`${v.status==='open'&&cands.length?`<button class="btn ghost sm" data-act="holdback" data-vac="${v.id}" title="Show the status-quo alternative: an off-going member held over instead of a fair recall">Can't fill → record hold-back</button><span style="flex:1"></span>`:''}<button class="btn" data-act="closemodal">Close</button>`);
 }
@@ -984,8 +995,8 @@ function viewCost(){
 /* ---------- BC: Audit Log ---------- */
 function viewAudit(){
   const log=state.log||[];
-  const badge={offer:'accent',accept:'ok',decline:'warn',assign:'ok',override:'crit',holdback:'crit'};
-  const lbl={offer:'Offered',accept:'Accepted',decline:'Declined',assign:'Assigned',override:'Override',holdback:'Hold Back'};
+  const badge={notify:'accent',offer:'accent',accept:'ok',decline:'warn',assign:'ok',override:'crit',holdback:'crit'};
+  const lbl={notify:'Notified',offer:'Offered',accept:'Accepted',decline:'Declined',assign:'Assigned',override:'Override',holdback:'Hold Back'};
   return `<div class="page-head"><div><h2>Audit Log</h2><p>Every recall action — who was offered, who accepted or declined, who was assigned, by which BC</p></div>
    <span class="spacer"></span>${log.length?`<button class="btn sm" data-act="csvAudit">↓ Export CSV</button>`:''}</div>
   <div class="card"><div class="bd tight">${log.length?`<div class="scroll"><table class="resp"><thead><tr><th>Time</th><th>Event</th><th>Member</th><th>Vacancy</th><th>By</th><th>Note</th></tr></thead><tbody>
@@ -1019,8 +1030,71 @@ function viewHow(){
 }
 
 /* ---------- FF: My Recall ---------- */
+/* ---------- FF: Recall Now (member-side notify + 30-min clock) ---------- */
+function windowOpen(v){if(v.type!=='unscheduled')return true;if(!v.postedAt)return true;return Date.now()-v.postedAt < (v.windowMins||30)*60000;}
+function remainingMs(v){if(!v.postedAt)return (v.windowMins||30)*60000;return Math.max(0,(v.windowMins||30)*60000-(Date.now()-v.postedAt));}
+function fmtClock(ms){const s=Math.floor(ms/1000);return ('0'+Math.floor(s/60)).slice(-2)+':'+('0'+(s%60)).slice(-2);}
+function startRecallClock(){
+  if(window.__recallTimer)clearInterval(window.__recallTimer);
+  window.__recallTimer=setInterval(()=>{
+    const els=document.querySelectorAll('[data-countdown]');
+    if(!els.length){clearInterval(window.__recallTimer);window.__recallTimer=null;return;}
+    let expired=false;
+    els.forEach(el=>{const v=state.vacancies.find(x=>x.id===el.dataset.countdown); if(!v)return;
+      const rem=remainingMs(v); el.textContent=fmtClock(rem);
+      if(rem<=0)expired=true; else if(rem<5*60000)el.style.color='var(--crit)';});
+    if(expired)render(); // flip the UI to the closed-window state once
+  },1000);
+}
+function notifyInterest(vacId){
+  const m=curMember(); const v=state.vacancies.find(x=>x.id===vacId);
+  if(!m||!v)return;
+  if(v.status!=='open'){toast('warn','Already filled','This opportunity has already been assigned.');render();return;}
+  if(!windowOpen(v)){toast('warn','Window closed','The 30-minute notification window has passed.');render();return;}
+  if(!eligible(m,v)){toast('warn','Not eligible','You are not an eligible counterpart for this opportunity.');return;}
+  v.interested=v.interested||[];
+  if(v.interested.some(x=>x.memberId===m.id)){toast('','Already notified','You have already notified the BC for this one.');return;}
+  const t=nextLogTime(); v.interested.push({memberId:m.id,t});
+  logEvent('notify',v,m.id,'Counterpart notified availability (30-min window)',m.id);
+  notify(`${m.id} notified availability for ${stById(v.stationId).name} ${v.cls} recall (30-min window).`);
+  save(); render();
+  toast('ok','BC notified',`Text + email sent to the on-duty BC (simulated). You're in the pool for ${stById(v.stationId).name} ${v.cls}.`);
+}
+function viewRecall(){
+  const m=curMember();
+  const opps=state.vacancies.filter(v=>v.type==='unscheduled'&&(
+    (v.status==='open'&&eligible(m,v))||v.assigneeId===m.id||(v.interested||[]).some(x=>x.memberId===m.id)));
+  const head=`<div class="page-head"><div><h2>Recall Now</h2><p>Same-day (unscheduled) recall openings you're eligible for. Notify the on-duty BC within 30 minutes to get in the pool (policy §V.3).</p></div></div>`;
+  if(!opps.length) return head+`<div class="card"><div class="bd"><span class="pill ok">No open same-day recall openings you're eligible for right now.</span>
+    <p class="note" style="margin-top:12px">Eligible means off-duty, in your 4-day-off window, under the 34-hr continuous cap and the ${FY_CAP}h maximum. Scheduled openings are bid in advance under <b>Bid for Assignment</b>.</p></div></div>`;
+  const cards=opps.map(v=>{const st=stById(v.stationId);
+    const mine=v.assigneeId===m.id, filledOther=v.status==='filled'&&!mine, iNot=(v.interested||[]).some(x=>x.memberId===m.id), open=v.status==='open', win=windowOpen(v), rem=remainingMs(v), urgent=rem<5*60000;
+    let action;
+    if(mine)action=`<span class="pill ok">✓ You were recalled — confirmation sent (simulated)</span>`;
+    else if(filledOther)action=`<span class="pill muted">Filled by another counterpart</span>`;
+    else if(iNot)action=`<div style="display:flex;flex-direction:column;gap:5px;align-items:flex-start"><span class="pill accent">✓ Notified — awaiting BC assignment</span><span style="font-size:11.5px;color:var(--muted)">Your text + email reached the on-duty BC. You're in the first-come pool.</span></div>`;
+    else if(open&&win)action=`<button class="btn primary" data-act="notifyinterest" data-id="${v.id}">Notify BC I'm available →</button>`;
+    else action=`<div style="display:flex;flex-direction:column;gap:5px;align-items:flex-start"><span class="pill crit">Window closed</span><span style="font-size:11.5px;color:var(--muted)">The 30-minute window passed. If no one notified, an off-going member is held back to hold staffing.</span></div>`;
+    const nInt=(v.interested||[]).length;
+    return `<div class="card" style="margin-bottom:14px"><div class="bd" style="display:flex;gap:18px;flex-wrap:wrap;align-items:center">
+      <div style="flex:1;min-width:220px">
+        <div style="font-weight:700;font-size:15px">${st.name} · ${GRADE_OF_RANK[v.rank]||''} ${v.rank} · ${v.cls}</div>
+        <div style="font-size:12.5px;color:var(--muted);margin-top:2px">${st.island}${st.remote?' · Remote 72':''} · ${segLabel(v.segment)} (${v.hours}h) · ${reasonLbl(v.reason)}</div>
+        <div style="margin-top:8px">${v.wouldHoldBack?'<span class="pill crit">Hold-back risk</span>':'<span class="pill warn">'+ratioStr(v)+' · short '+v.shortBy+'</span>'} ${nInt?`<span class="pill muted">${nInt} notified</span>`:''}</div>
+      </div>
+      ${open?`<div style="text-align:center;min-width:118px">
+        <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.03em">Time to notify</div>
+        <div class="mono" ${win?`data-countdown="${v.id}"`:''} style="font-size:28px;font-weight:800;color:var(--${win?(urgent?'crit':'text'):'crit'})">${win?fmtClock(rem):'00:00'}</div>
+      </div>`:''}
+      <div style="min-width:200px">${action}</div>
+    </div></div>`;}).join('');
+  return head+cards+`<p class="note">For <b>unscheduled</b> absences (sick call, emergency), ranked personnel interested in working notify the on-duty BC <b>within 30 minutes</b> of notification (§V.3). The BC assigns from those who notified: first-come under the policy, or fewest-hours first under equity-first.</p>`;
+}
+
+/* ---------- FF: Homepage ---------- */
 function viewHome(){
   const m=curMember(); const pct=Math.round(m.fyHours/FY_CAP*100);
+  const liveRecall=state.vacancies.filter(v=>v.type==='unscheduled'&&v.status==='open'&&eligible(m,v)&&windowOpen(v)&&!(v.interested||[]).some(x=>x.memberId===m.id));
   const all=Object.values(state.members).filter(x=>x.qualifiedClasses.some(c=>m.qualifiedClasses.includes(c)));
   const fewer=all.filter(x=>x.fyHours>m.fyHours).length; const standing=Math.round(fewer/all.length*100);
   const offers=[];
@@ -1031,6 +1105,7 @@ function viewHome(){
     else if(bidded)offers.push({v,status:'Pending',cls:'accent'});});
   offers.sort((a,b)=>a.v.date.localeCompare(b.v.date));
   return `<div class="page-head"><div><h2>My Recall</h2><p>${m.id} · ${m.grade}·${m.step} ${m.rank} · ${stById(m.homeStationId).name} · <span class="ptag ${m.platoon}">${m.platoon}</span> ${PLATOON[m.platoon].name}</p></div></div>
+  ${liveRecall.length?`<div class="intro" role="note"><div class="ico" aria-hidden="true">!</div><div class="tx"><b>Open same-day recall.</b> ${liveRecall.length} opening you're eligible for has a live 30-minute notify window. Notify the on-duty BC to get in the pool.<div style="margin-top:9px"><button class="btn sm primary" data-act="nav" data-v="recall">Go to Recall Now →</button></div></div></div>`:''}
   <div class="grid cols-3" style="margin-bottom:18px">
     <div class="card stat"><div class="k">Recall hours this FY</div><div class="v">${m.fyHours}<span style="font-size:16px;color:var(--muted)"> / ${FY_CAP}h</span></div>
       <div style="margin-top:10px">${hoursBar(m.fyHours)}</div><div class="sub">${remaining(m)}h remaining · ${money(m.fyHours*otRate(m))} earned at $${otRate(m).toFixed(2)}/hr OT</div></div>
@@ -1150,7 +1225,7 @@ function nextLogTime(){const log=state.log||[];let base=7*60+45; // 07:45 defaul
   if(log.length){const p=String(log[0].t).split(':').map(Number);if(!isNaN(p[0]))base=p[0]*60+(p[1]||0);}
   const t=Math.min(23*60+59,base+3+(log.length%4)); // +3..+6 min, monotonic
   return ('0'+Math.floor(t/60)).slice(-2)+':'+('0'+(t%60)).slice(-2);}
-function logEvent(type,v,memberId,note){if(!state.log)state.log=[];state.log.unshift({t:nextLogTime(),type,by:'BC '+bcNum(),memberId,station:stById(v.stationId).name,rank:v.rank,cls:v.cls,vacId:v.id,note:note||''});}
+function logEvent(type,v,memberId,note,by){if(!state.log)state.log=[];state.log.unshift({t:nextLogTime(),type,by:by||('BC '+bcNum()),memberId,station:stById(v.stationId).name,rank:v.rank,cls:v.cls,vacId:v.id,note:note||''});}
 function offerRecall(vacId,mId){
   const v=state.vacancies.find(x=>x.id===vacId); const m=state.members[mId];
   const rec=rankCandidates(v)[0]; const eq=equityBest(v);
@@ -1436,6 +1511,7 @@ document.addEventListener('click',e=>{
   else if(a==='holdback'){recordHoldback(t.dataset.vac);}
   else if(a==='closemodal'||a==='scrim'){if(a==='scrim'&&e.target!==t)return;closeModal();}
   else if(a==='clearnotif'){state.notifications=[];closeModal();}
+  else if(a==='notifyinterest'){notifyInterest(t.dataset.id);}
   else if(a==='bid'){placeBid(t.dataset.id);}
   else if(a==='bidwarn'){bidWarn(t.dataset.id);}
   else if(a==='setavail'){setAvail(t.dataset.d,true);}
@@ -1495,6 +1571,8 @@ $('#bell').addEventListener('click',()=>{
 
 /* ============================================================ 7. INIT */
 load();
+// refresh the 30-min notify window each session so the demo always shows a live countdown
+state.vacancies.forEach(v=>{if(v.type==='unscheduled'&&v.status==='open'){v.postedAt=Date.now();if(!v.windowMins)v.windowMins=30;if(!v.interested)v.interested=[];}});
 if(!state.notifications.length){notify('Sick call at Kīhei — Engine short 1 for today\'s shift. Recall opportunity open.');}
 render();
 // ponytail: forecast self-check — run with ?selftest, results in console. No UI impact.
