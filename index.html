@@ -531,7 +531,7 @@ function eagerness(m){let h=0;for(const ch of m.id)h=(h*31+ch.charCodeAt(0))>>>0
 
 /* ============================================================ 5. RENDER */
 const $=s=>document.querySelector(s); const root=$('#main'); let _lastView=null;
-const NAV={bc:[['cmd','Command Center'],['forecast','Shortage Forecast'],['cost','Cost & Coverage'],['equity','Equity Dashboard'],['audit','Audit Log'],['roster','Roster'],['create','Create Opportunity'],['reports','Reports']],
+const NAV={bc:[['cmd','Command Center'],['forecast','Shortage Forecast'],['cost','Cost & Coverage'],['equity','Equity Dashboard'],['pilot','Pilot Review'],['audit','Audit Log'],['roster','Roster'],['create','Create Opportunity'],['reports','Reports']],
   ff:[['home','Homepage'],['forecast','Shortage Forecast'],['opps','Bid for Assignment'],['avail','Day-Of Availability'],['nobid','No-Bid'],['profile','User Profile']]};
 function curMember(){return isBC()?null:state.members[state.role];}
 function isBC(){return state.role==='bc1'||state.role==='bc2';}
@@ -557,7 +557,7 @@ function render(){
   // bell
   const n=state.notifications.length;const bc=$('#bellCount');bc.hidden=!n;bc.textContent=n;
   // view
-  const V={cmd:viewCmd,forecast:viewForecast,cost:viewCost,create:viewCreate,equity:viewEquity,audit:viewAudit,roster:viewRoster,reports:viewReports,how:viewHow,
+  const V={cmd:viewCmd,forecast:viewForecast,cost:viewCost,create:viewCreate,equity:viewEquity,pilot:viewPilot,audit:viewAudit,roster:viewRoster,reports:viewReports,how:viewHow,
            home:viewHome,opps:viewOpps,avail:viewAvail,nobid:viewNoBid,profile:viewProfile};
   root.innerHTML=(V[state.view]||(()=>'<p>Not found</p>'))();
   if(state.view!==_lastView){_lastView=state.view;root.classList.remove('enter');void root.offsetWidth;root.classList.add('enter');} // one-shot entrance only when the view actually changes
@@ -824,6 +824,70 @@ function viewEquity(){
   <div class="card"><div class="hd"><h3>Average hours by apparatus pool</h3></div><div class="bd tight"><table><thead><tr><th>Apparatus</th><th>Qualified members</th><th>Avg hours</th><th></th></tr></thead><tbody>
     ${byClass.map(b=>`<tr><td>${b.c}</td><td>${b.n}</td><td class="mono">${b.avg}h</td><td style="width:40%">${hoursBar(b.avg)}</td></tr>`).join('')}
   </tbody></table></div></div>`;
+}
+
+/* ---------- BC: Pilot Review (288-hour attainment) ---------- */
+function viewPilot(){
+  const ms=Object.values(state.members), N=ms.length, GUAR=FY_CAP, MAXED=GUAR-MIN_BLOCK; // 276 = within a 12h block of 288
+  const att=m=>Math.min(100,Math.round(m.fyHours/GUAR*100));
+  const band=m=>m.fyHours>=MAXED?'maxed':m.fyHours>=192?'ontrack':m.fyHours>=72?'under':'stranded';
+  const counts={maxed:0,ontrack:0,under:0,stranded:0}; ms.forEach(m=>counts[band(m)]++);
+  const pct=n=>Math.round(n/N*100);
+  const gapHrs=ms.reduce((a,m)=>a+Math.max(0,GUAR-m.fyHours),0);
+  const belowLine=ms.filter(m=>m.fyHours<MAXED).length; // below the ≥276h near-cap line (counts.maxed is its complement)
+  const avgAtt=Math.round(ms.reduce((a,m)=>a+att(m),0)/N);
+  const stranded=[...ms].sort((a,b)=>a.fyHours-b.fyHours).slice(0,8);
+  const byPlat=['R','G','B'].map(p=>{const g=ms.filter(m=>m.platoon===p);const a=g.length?Math.round(g.reduce((s,m)=>s+att(m),0)/g.length):0;return{p,n:g.length,mx:g.filter(m=>m.fyHours>=MAXED).length,att:a};});
+  const byStation=STATIONS.map(s=>{const g=ms.filter(m=>m.homeStationId===s.id);const a=g.length?Math.round(g.reduce((x,m)=>x+att(m),0)/g.length):0;return{name:s.name,n:g.length,att:a};}).filter(x=>x.n).sort((a,b)=>a.att-b.att);
+  const seg=(n,col)=>`<div style="width:${n/N*100}%;background:var(--${col})" title="${n} members"></div>`;
+  return `<div class="page-head"><div><h2>Pilot Review</h2><p>288-hour attainment across all ${N} ranked members. The pilot's own success measure.</p></div>
+   <span class="spacer"></span><button class="btn sm" data-act="print">⎙ Print this page</button></div>
+  <div class="card" style="border-color:var(--accent);margin-bottom:16px"><div class="bd" style="padding:18px 20px">
+    <div style="font-size:15px;font-weight:700">Pilot goal: every ranked member offered at least ${GUAR} recall hours this fiscal year.</div>
+    <div style="font-size:12.5px;color:var(--muted);margin-top:3px">Attainment as of ${fmt(state.demoDate)} · pilot period Nov 1 2025 to Jun 30 2026, one-year review this October.</div>
+    <div style="display:flex;gap:28px;flex-wrap:wrap;margin-top:14px">
+      <div><div style="font-size:30px;font-weight:800;color:var(--ok);line-height:1">${pct(counts.maxed)}%</div><div style="font-size:12px;color:var(--muted);margin-top:4px">at or near the ${GUAR}h cap, ≥${MAXED}h (${counts.maxed} of ${N})</div></div>
+      <div><div style="font-size:30px;font-weight:800;color:var(--crit);line-height:1">${counts.stranded}</div><div style="font-size:12px;color:var(--muted);margin-top:4px">stranded under 25% (${pct(counts.stranded)}%)</div></div>
+      <div><div style="font-size:30px;font-weight:800;line-height:1">${gapHrs.toLocaleString()}h</div><div style="font-size:12px;color:var(--muted);margin-top:4px">still owed to fulfill the guarantee</div></div>
+      <div><div style="font-size:30px;font-weight:800;line-height:1">${avgAtt}%</div><div style="font-size:12px;color:var(--muted);margin-top:4px">average attainment per member</div></div>
+    </div>
+  </div></div>
+  <div class="card" style="margin-bottom:16px"><div class="hd"><h3>Where the ${N} members stand against the ${GUAR}h guarantee</h3></div><div class="bd">
+    <div style="display:flex;height:26px;border-radius:8px;overflow:hidden;border:1px solid var(--border)">
+      ${seg(counts.maxed,'ok')}${seg(counts.ontrack,'accent')}${seg(counts.under,'warn')}${seg(counts.stranded,'crit')}</div>
+    <div class="legend" style="margin-top:12px">
+      <span><span class="sw" style="background:var(--ok)"></span> At/near cap ≥${MAXED}h · ${counts.maxed} (${pct(counts.maxed)}%)</span>
+      <span><span class="sw" style="background:var(--accent)"></span> On track 192 to ${MAXED-1}h · ${counts.ontrack} (${pct(counts.ontrack)}%)</span>
+      <span><span class="sw" style="background:var(--warn)"></span> Underserved 72 to 191h · ${counts.under} (${pct(counts.under)}%)</span>
+      <span><span class="sw" style="background:var(--crit)"></span> Stranded under 72h · ${counts.stranded} (${pct(counts.stranded)}%)</span>
+    </div></div></div>
+  <div class="grid cols-2">
+    <div class="card"><div class="hd"><h3>The guarantee gap</h3></div><div class="bd"><dl class="kv">
+      <dt>Members below ${MAXED}h</dt><dd>${belowLine} of ${N}</dd>
+      <dt>Hours still owed to reach the full ${GUAR}h guarantee</dt><dd><b>${gapHrs.toLocaleString()}h</b></dd>
+      <dt>Average attainment</dt><dd>${avgAtt}% of the ${GUAR}h guarantee</dd>
+      <dt>At or near cap (≥${MAXED}h)</dt><dd>${counts.maxed} (${pct(counts.maxed)}%)</dd>
+    </dl>
+    <p class="note" style="margin-top:12px">The pilot's stated purpose was to give members more chances to max their ${GUAR}. Closing this gap fairly is what the one-year review measures.</p></div></div>
+    <div class="card"><div class="hd"><h3>Stranded members (first in line)</h3><span class="spacer"></span><span class="pill crit">${counts.stranded} under 25%</span></div><div class="bd tight"><table><tbody>
+      ${stranded.map(m=>`<tr><td><b class="mono">${m.id}</b> <span class="ptag ${m.platoon}">${m.platoon}</span></td><td>${stById(m.homeStationId).name}</td>
+        <td style="width:120px">${hoursBar(m.fyHours)}</td><td class="mono" style="text-align:right">${m.fyHours}/${GUAR}h<div style="font-size:11px;color:var(--muted)">${att(m)}%</div></td></tr>`).join('')}
+    </tbody></table></div></div>
+  </div>
+  <div style="height:16px"></div>
+  <div class="grid cols-2">
+    <div class="card"><div class="hd"><h3>Attainment by platoon</h3></div><div class="bd tight"><table><thead><tr><th>Platoon</th><th>Members</th><th>Maxed</th><th>Avg</th></tr></thead><tbody>
+      ${byPlat.map(b=>`<tr><td><span class="ptag ${b.p}">${b.p}</span> ${PLATOON[b.p].name}</td><td>${b.n}</td><td>${b.mx}</td><td class="mono">${b.att}%</td></tr>`).join('')}
+    </tbody></table></div></div>
+    <div class="card"><div class="hd"><h3>Attainment by station (lowest first)</h3></div><div class="bd tight"><div class="scroll"><table><thead><tr><th>Station</th><th>Mbrs</th><th>Avg attainment</th></tr></thead><tbody>
+      ${byStation.map(b=>`<tr><td>${b.name}</td><td>${b.n}</td><td style="min-width:150px"><div style="display:flex;align-items:center;gap:8px"><div style="flex:1;background:var(--surface-3);border-radius:5px;height:8px;overflow:hidden"><i style="display:block;height:100%;width:${b.att}%;background:var(--ok)"></i></div><span class="mono" style="font-size:11px">${b.att}%</span></div></td></tr>`).join('')}
+    </tbody></table></div></div></div>
+  </div>
+  <div style="height:16px"></div>
+  <div class="card"><div class="bd">
+    <p style="margin-top:0;font-size:13.5px;line-height:1.6">Under the policy's <b>first-come, first-serve</b> default (§VI), a motivated few answer first and climb toward ${GUAR} while many stay stranded (the shape above). <b>Equity-first</b> offers each opening to the fewest-hours counterpart, so the same total overtime lifts more members to the guarantee. That is the improvement the one-year pilot review can adopt.</p>
+    <button class="btn primary sm" data-act="nav" data-v="equity">See the full-year projection →</button>
+  </div></div>`;
 }
 
 /* ---------- BC: Roster ---------- */
