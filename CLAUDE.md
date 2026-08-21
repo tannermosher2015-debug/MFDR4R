@@ -8,11 +8,16 @@ it the first time you work in this repo.
 Single-file static HTML/CSS/JS. No framework.
 
 ## Deploy target
-**UNKNOWN.** Nothing on disk named a host.
-Until this line names one, `cpd` will refuse this repo, which is correct.
+**Hostinger, `mfdrecall.frontlinewebdesign.tech`. A Netlify project `mfdr4rsoftware` also exists.**
 
 ## Does a push publish?
-**UNKNOWN.** No remote deploy config found on disk.
+**NO.** This repo has no deploy webhook and no deploying GitHub Action, so nothing is
+listening for a push. Deploys are manual (Hostinger MCP upload, or a Netlify CLI/drop).
+
+Settled 2026-08-21 by `gh api repos/<owner>/<repo>/hooks` across all 48 retrofitted repos,
+plus a check for a deploying GitHub Action. Control: `publicsafetyfactshawaii`, which is
+documented as auto-deploying, returned the Netlify hook, so the test detects git-linkage
+rather than silently returning empty.
 
 ## Remote
 `git@github.com:tannermosher2015-debug/MFDR4R.git`, branch `main`.
