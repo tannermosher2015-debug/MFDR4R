@@ -7,31 +7,23 @@ it the first time you work in this repo.
 ## Stack
 Single-file static HTML/CSS/JS. No framework.
 
-## Deploy target
-**Hostinger, `mfdrecall.frontlinewebdesign.tech`. A Netlify project `mfdr4rsoftware` also exists.**
+## Deploy targets (two, measured 2026-09-29)
+1. **Netlify `mfdr4rsoftware`, https://mfdr4rsoftware.netlify.app/ . Git-linked to `MFDR4R` `main`.**
+   Netlify API (`GET /api/v1/sites`): `build_settings.repo_url` = this repo, branch `main`, published
+   deploy `6a8fecee174df600084d3491` carries `commit_ref` `c6832b7`. It also serves `CLAUDE.md` and
+   `README.md` (both 200), so it publishes a checkout of the whole repo root.
+2. **Hostinger `mfdrecall.frontlinewebdesign.tech`** (account `u987655740`, root
+   `public_html/mfdrecall`). Zip deploy only: it 404s `CLAUDE.md`. Its `.htaccess` holds only
+   `Header set X-Robots-Tag "noindex, nofollow"`, so keep that file in every zip.
 
 ## Does a push publish?
-**NO.** This repo has no deploy webhook and no deploying GitHub Action, so nothing is
-listening for a push. Deploys are manual (Hostinger MCP upload, or a Netlify CLI/drop).
+**YES, to Netlify.** A push to `main` rebuilds https://mfdr4rsoftware.netlify.app/ . Verify locally
+before every push. **Hostinger does NOT update on push**: redeploy it by zip through the Hostinger
+MCP (`hosting_deploy-static-website`), or it falls behind. It sat on commit `e4ee423` from
+2026-06-23 until 2026-09-29.
 
-Settled 2026-08-21 by `gh api repos/<owner>/<repo>/hooks` across all 48 retrofitted repos,
-plus a check for a deploying GitHub Action. Control: `publicsafetyfactshawaii`, which is
-documented as auto-deploying, returned the Netlify hook, so the test detects git-linkage
-rather than silently returning empty.
-
-**CORRECTED 2026-08-21, same day, and it WEAKENS the verdict above: `gh api .../hooks` is the
-right test for NETLIFY ONLY. It is the WRONG test for a HOSTINGER git deploy AND for VERCEL,
-which uses a GitHub APP that registers no repo-level webhook (proven on `ohana-pickleball`:
-zero hooks, yet its Vercel production deploy landed 3m21s after the last pushed commit).** Proven by controlled
-test on `frontline-website`: pushing commit `b024a2c` and doing nothing else redeployed the live
-site inside a minute, while that repo carries ZERO GitHub webhooks. Hostinger's hPanel GIT
-integration triggers without registering a repo-level hook, so a zero here does NOT rule out a
-Hostinger auto-deploy. **Corroborating probe, which does work:** a repo `.md` served live means
-the server holds a git CHECKOUT; a 404 means it holds uploaded output only. Measured 2026-08-21,
-`bronzeage`, `designresource`, `holu`, `freshhaven`, `keokea` and `unclemahis` all 404 their
-`BRIEF.md` while serving their root, so those are zip deploys and the NO above holds for them.
-**For any repo not on that probed list, treat the NO as UNVERIFIED for Hostinger and check hPanel
--> Advanced -> GIT before relying on it.**
+The 2026-08-21 retrofit said NO here. That was wrong: `gh api .../hooks` returned nothing, but the
+Netlify link is real, per the API read above.
 
 
 ## Remote
@@ -42,4 +34,5 @@ the server holds a git CHECKOUT; a 404 means it holds uploaded output only. Meas
 built HTML. Every edit gets both shots before a deploy, including one-character ones.
 
 ## Landmines
-<Empty. Add each one the day it bites, with the date.>
+- 2026-09-29: Netlify serves every file in the repo root, including this file and `docs/`. Keep
+  nothing private in the repo. The repo is also PUBLIC on GitHub.
